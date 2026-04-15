@@ -19,8 +19,8 @@ from django.template.loader import render_to_string
 from django.core.mail import EmailMultiAlternatives
 from django.utils.html import strip_tags
 from django.utils import timezone
-<<<<<<< HEAD
 from datetime import timedelta, date
+from .forms import ContactForm
 
 # ✅ Función auxiliar: filtra productos que no están vencidos
 def filtrar_productos_no_vencidos(productos_queryset):
@@ -66,15 +66,7 @@ def filtrar_productos_no_vencidos(productos_queryset):
                 productos_validos.append(producto)
     
     return productos_validos
-=======
-from datetime import timedelta
-from django.conf import settings
-from django.contrib import messages
-from django.core.mail import EmailMessage
-from django.shortcuts import render, redirect
-from .forms import ContactForm
 
->>>>>>> 9d185af (Hacer contacto.html y form.py)
 
 # ✅ Función auxiliar: obtiene el carrito actual desde sesión
 def obtener_carrito_actual(request):
@@ -1141,14 +1133,47 @@ def contacto(request):
     if request.method == 'POST':
         nombre = request.POST.get('nombre')
         email = request.POST.get('email')
+        telefono = request.POST.get('telefono', '')
+        asunto = request.POST.get('asunto')
         mensaje = request.POST.get('mensaje')
 
+        # Validar campos requeridos
+        if not all([nombre, email, asunto, mensaje]):
+            messages.error(request, "Por favor completa todos los campos requeridos.")
+            return redirect('contacto')
+
         # Guardar el mensaje en la base de datos
-        from core.models import MensajeContacto
-        MensajeContacto.objects.create(
+        from core.models import MensajeContacto, NotificacionReporte
+        from django.utils import timezone
+        
+        mensaje_contacto = MensajeContacto.objects.create(
             nombre=nombre,
             email=email,
-            mensaje=mensaje
+            mensaje=f"Asunto: {asunto}\nTeléfono: {telefono}\n\n{mensaje}"
+        )
+
+        # Crear notificación para el admin
+        contenido_html = f"""
+        <div style="font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; border-radius: 10px;">
+            <h3 style="color: #6b21a8; margin-bottom: 15px;">📧 Nuevo Mensaje de Contacto</h3>
+            <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
+                <p><strong>De:</strong> {nombre}</p>
+                <p><strong>Email:</strong> <a href="mailto:{email}">{email}</a></p>
+                {f'<p><strong>Teléfono:</strong> {telefono}</p>' if telefono else ''}
+                <p><strong>Asunto:</strong> {asunto}</p>
+                <p><strong>Fecha:</strong> {timezone.now().strftime('%d/%m/%Y %H:%M')}</p>
+            </div>
+            <div style="background: white; padding: 15px; border-radius: 8px;">
+                <p><strong>Mensaje:</strong></p>
+                <p style="white-space: pre-wrap;">{mensaje}</p>
+            </div>
+        </div>
+        """
+        
+        NotificacionReporte.objects.create(
+            titulo=f"Mensaje de {nombre}: {asunto}",
+            contenido_html=contenido_html,
+            tipo='CONTACTO'
         )
 
         messages.success(request, "Tu mensaje ha sido enviado. ¡Gracias por contactarnos!")
@@ -1650,7 +1675,6 @@ def notificaciones_cliente(request):
     return render(request, 'notificaciones_cliente.html', {
         'notificaciones': notificaciones
     })
-<<<<<<< HEAD
 
 
 def calificar_entrega(request, idPedido):
@@ -1740,69 +1764,4 @@ def mis_pedidos(request):
         'pedidos': pedidos,
         'cliente': cliente
     })
-=======
-# core/views.py
 
-def contacto(request):
-    form = ContactForm(data=request.POST or None)
-
-    if request.method == "POST" and form.is_valid():
-        nombre  = form.cleaned_data["nombre"]
-        email   = form.cleaned_data["email"]
-        asunto  = form.cleaned_data["asunto"]
-        mensaje = form.cleaned_data["mensaje"]
-        telefono = form.cleaned_data.get("telefono") or "No informado"
-
-        # Arma el cuerpo del correo
-        body = (
-            f"Nuevo mensaje de contacto desde GlamStore:\n\n"
-            f"Nombre: {nombre}\n"
-            f"Email: {email}\n"
-            f"Teléfono: {telefono}\n"
-            f"Asunto: {asunto}\n\n"
-            f"Mensaje:\n{mensaje}\n"
-        )
-
-        # Remitente y destinatarios
-        remitente = settings.EMAIL_HOST_USER  # tu Gmail configurado
-        para_tienda = [settings.EMAIL_HOST_USER]  # te llega a ti
-        para_cliente = [email]  # copia de confirmación para el cliente (opcional abajo)
-
-        # 1) Email para la tienda
-        mail_tienda = EmailMessage(
-            subject=f"[Contacto GlamStore] {asunto}",
-            body=body,
-            from_email=settings.DEFAULT_FROM_EMAIL,  # e.g. "Glam Store <tu_gmail>"
-            to=para_tienda,
-            reply_to=[email],  # si respondes, responde al cliente
-        )
-
-        # 2) Email de confirmación para el cliente (opcional)
-        mail_cliente = EmailMessage(
-            subject="Hemos recibido tu mensaje - GlamStore",
-            body=(
-                f"Hola {nombre},\n\n"
-                "¡Gracias por escribirnos! Hemos recibido tu mensaje y te responderemos pronto.\n\n"
-                "Resumen de tu solicitud:\n"
-                f"Asunto: {asunto}\n"
-                f"Mensaje: {mensaje}\n\n"
-                "Cariños,\nGlamStore"
-            ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=para_cliente,
-        )
-
-        try:
-            mail_tienda.send(fail_silently=False)
-            mail_cliente.send(fail_silently=True)  # si falla, no rompemos el flujo
-            messages.success(request, "¡Gracias! Hemos recibido tu mensaje y te contactaremos pronto. 💌")
-            return redirect("contacto")
-        except Exception as ex:
-            messages.error(
-                request,
-                "No pudimos enviar tu mensaje por ahora. Inténtalo más tarde o escríbenos a nuestro correo."
-            )
-
-    # GET o formulario con errores
-    return render(request, "contacto.html", {"form": form})
->>>>>>> 9d185af (Hacer contacto.html y form.py)

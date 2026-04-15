@@ -1,14 +1,11 @@
-
 from pathlib import Path
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -22,11 +19,11 @@ DEBUG = DEBUG_ENV.lower() in ('true', '1', 'yes')
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,*.onrender.com').split(',')
 
-import os
+# Asegura importación de la app 'core' como módulo
 import sys
 sys.path.append(os.path.join(BASE_DIR, 'core'))
-# Application definition
 
+# Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -40,7 +37,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # WhiteNoise antes de CommonMiddleware
     'core.middleware.MediaFilesMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -51,6 +48,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'glamstore.urls'
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -82,78 +80,42 @@ TEMPLATES = [
         },
     },
 ]
+
 LOGOUT_REDIRECT_URL = '/'
 
 WSGI_APPLICATION = 'glamstore.wsgi.application'
 
-
+# Static files
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'core', 'static'),
 ]
-
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# Configuración de Medios (para subida de archivos)
+# Media (uploads)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-
-
-<<<<<<< HEAD
-# Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-import dj_database_url
-
-# Soporta tanto DATABASE_URL como URL_DE_LA_BASE_DE_DATOS (variable en español de Railway)
-DATABASE_URL = os.getenv('URL_DE_LA_BASE_DE_DATOS') or os.getenv('DATABASE_URL')
-
-if DATABASE_URL:
-    try:
-        # Configuración para Railway (MySQL o PostgreSQL)
-        # dj_database_url parsea automáticamente la URL
-        DATABASES = {
-            'default': dj_database_url.config(
-                default=DATABASE_URL,
-                conn_max_age=600,
-                conn_health_checks=True,
-            )
-        }
-    except Exception as e:
-        print(f"Error parsing DATABASE_URL: {e}")
-        # Fallback a SQLite si hay error
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.sqlite3',
-                'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-            }
-        }
-else:
-    # Configuración local (SQLite para desarrollo)
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-        }
-=======
-
-
+# -----------------------------------------------------------------------------
+# Database (solo uso local con MySQL/MariaDB)
+# -----------------------------------------------------------------------------
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'glamstoredb',
-        'USER': 'root',
-        'PASSWORD': '0000',
-        'HOST': 'localhost', 
-        'PORT': '3306',
->>>>>>> 9d185af (Hacer contacto.html y form.py)
+        'NAME': os.getenv('MYSQL_DATABASE', 'glamstoredb'),
+        'USER': os.getenv('MYSQL_USER', 'root'),
+        'PASSWORD': os.getenv('MYSQL_PASSWORD', '0000'),  # cambia si es necesario
+        'HOST': os.getenv('MYSQL_HOST', '127.0.0.1'),
+        'PORT': os.getenv('MYSQL_PORT', '3306'),
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
     }
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -169,38 +131,22 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
-
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/4.2/howto/static-files/
-
-STATIC_URL = '/static/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Configuración para envío de correos con Gmail
+# Email (Gmail)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'glamstore0303777@gmail.com'
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')  # usa App Password si tienes 2FA
 DEFAULT_FROM_EMAIL = 'Glam Store <glamstore0303777@gmail.com>'
-<<<<<<< HEAD
-=======
-
->>>>>>> 9d185af (Hacer contacto.html y form.py)
