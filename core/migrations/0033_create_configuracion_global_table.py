@@ -13,15 +13,15 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             sql="""
             CREATE TABLE IF NOT EXISTS configuracion_global (
-                id BIGSERIAL PRIMARY KEY,
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
                 margen_ganancia DECIMAL(5, 2) DEFAULT 10.00,
                 fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             """,
-            reverse_sql="DROP TABLE IF EXISTS configuracion_global CASCADE;",
+            reverse_sql="DROP TABLE IF EXISTS configuracion_global;",
         ),
         migrations.RunSQL(
-            sql="INSERT INTO configuracion_global (id, margen_ganancia, fecha_actualizacion) VALUES (1, 10.00, CURRENT_TIMESTAMP) ON CONFLICT DO NOTHING;",
+            sql="INSERT IGNORE INTO configuracion_global (id, margen_ganancia, fecha_actualizacion) VALUES (1, 10.00, CURRENT_TIMESTAMP);",
             reverse_sql="DELETE FROM configuracion_global WHERE id = 1;",
         ),
     ]

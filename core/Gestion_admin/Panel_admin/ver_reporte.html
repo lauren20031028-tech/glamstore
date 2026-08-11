@@ -1,0 +1,65 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ reporte.titulo }} | Glam Store</title>
+  <link rel="icon" href="{% static 'img/logoglam.png' %}">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { margin: 0; font-family: 'Poppins', 'Segoe UI', sans-serif; background: #f5f7fa; }
+    
+    .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+    
+    .header { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); margin-bottom: 2rem; }
+    .header h1 { color: #1a202c; margin: 0 0 0.5rem 0; font-size: 2rem; }
+    .header-meta { display: flex; gap: 1rem; flex-wrap: wrap; color: #666; font-size: 0.9rem; }
+    .badge { display: inline-block; padding: 0.3rem 0.8rem; background: #e0f2fe; color: #0369a1; border-radius: 20px; font-weight: 600; font-size: 0.8rem; }
+    
+    .content { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); margin-bottom: 2rem; line-height: 1.6; }
+    .content p { margin: 1rem 0; }
+    .content strong { color: #3b82f6; }
+    
+    .actions { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .btn { padding: 0.7rem 1.5rem; border-radius: 20px; text-decoration: none; font-weight: 600; transition: all 0.3s ease; border: none; cursor: pointer; font-family: 'Poppins', 'Segoe UI', sans-serif; font-size: 0.95rem; display: inline-block; }
+    .btn-primary { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2); }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+    .btn-secondary { background: white; color: #3b82f6; border: 2px solid #3b82f6; }
+    .btn-secondary:hover { background: #eff6ff; }
+    
+    .back-link { display: inline-block; margin-bottom: 1rem; color: #3b82f6; text-decoration: none; font-weight: 600; }
+    .back-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="{% url 'notificaciones' %}" class="back-link">← Volver a Notificaciones</a>
+    
+    <div class="header">
+      <h1>{{ reporte.titulo }}</h1>
+      <div class="header-meta">
+        <span>📅 Recibido: {{ reporte.fechaCreacion|date:"d/m/Y H:i" }}</span>
+        {% if reporte.tipo == 'CONTACTO' %}
+        <span class="badge">📧 MENSAJE DE CONTACTO</span>
+        {% elif reporte.tipo == 'DASHBOARD' %}
+        <span class="badge">📊 REPORTE</span>
+        {% else %}
+        <span class="badge">{{ reporte.tipo }}</span>
+        {% endif %}
+      </div>
+    </div>
+    
+    <div class="content">
+      {{ reporte.contenido_html|safe }}
+    </div>
+    
+    <div class="actions">
+      <a href="{% url 'notificaciones' %}" class="btn btn-primary">Volver a Notificaciones</a>
+      {% if es_contacto %}
+      <a href="mailto:?subject=Respuesta a tu mensaje - Glam Store" class="btn btn-secondary">Responder por Email</a>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

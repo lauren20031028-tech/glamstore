@@ -7,6 +7,7 @@ urlpatterns = [
     # Dashboard principal
      path('', views.index, name='index'),
     path('dashboard/admin/', views.dashboard_admin_view, name='dashboard_admin'),
+    path('dashboard/descargar-reporte-pdf/', views.descargar_reporte_pdf, name='descargar_reporte_pdf'),
 
     # API
     path('api/subcategorias/<int:categoria_id>/', views.api_subcategorias_view, name='api_subcategorias'),
@@ -58,7 +59,7 @@ urlpatterns = [
     path('repartidores/editar/<int:id>/', views.repartidor_editar_view, name='repartidor_editar'),
     path('repartidores/eliminar/<int:id>/', views.repartidor_eliminar_view, name='repartidor_eliminar'),
     path('repartidores/asignar_pedido/', views.asignar_pedido_repartidor_view, name='asignar_pedido_repartidor'),
-    path('repartidores/asignar_multiples/', views.asignar_pedidos_multiples_view, name='asignar_pedidos_multiples'),
+    path('repartidores/asignar_multiples/', views.asignar_pedidos_correcta, name='asignar_pedidos_multiples'),
     path('repartidores/desasignar_multiples/', views.desasignar_pedidos_multiples_view, name='desasignar_pedidos_multiples'),
     path('repartidores/desasignar_pedido/<int:id_pedido>/', views.desasignar_repartidor_view, name='desasignar_repartidor'),
     path('repartidores/descargar_pdf_asignacion/<int:id_pedido>/', views.descargar_pdf_asignacion_view, name='descargar_pdf_asignacion'),
@@ -90,6 +91,7 @@ urlpatterns = [
     path('notificaciones/responder/<int:id_notificacion>/', views.responder_notificacion_view, name='responder_notificacion'),
     path('notificaciones/reporte/marcar_leido/<int:id_reporte>/', views.marcar_reporte_leido, name='marcar_reporte_leido'),
     path('notificaciones/reporte/ver/<int:id_reporte>/', views.ver_reporte_view, name='ver_reporte'),
+    path('notificaciones/mensaje/marcar_leido/<int:id_mensaje>/', views.marcar_mensaje_leido, name='marcar_mensaje_leido'),
 
     # Nuevas funciones de asignación automática y envío de PDFs
     path('repartidores/asignar_automaticamente/', views.asignar_pedidos_automaticamente_view, name='asignar_pedidos_automaticamente'),

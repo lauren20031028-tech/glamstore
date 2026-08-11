@@ -1,6 +1,7 @@
 {# django-html #}
 <!-- htmlhint: off -->
 <!-- stylelint-disable -->
+<!-- jshint ignore: start -->
 {% load static %}
 {% load humanize %}
 <!DOCTYPE html>
@@ -253,6 +254,14 @@
     .stat-card:hover {
       transform: translateY(-5px);
       box-shadow: 0 6px 20px rgba(168, 85, 247, 0.2);
+    }
+
+    .stat-card-alert {
+      border-top: 4px solid #ef4444 !important;
+    }
+
+    .stat-number-alert {
+      color: #ef4444 !important;
     }
 
     .stat-number {
@@ -969,6 +978,9 @@
       <h1>Panel de Administración</h1>
       <div class="breadcrumb">
         <span>Bienvenida: <strong>{{ request.session.usuario_nombre }}</strong> | Rol: <strong>Administrador</strong></span>
+        <a href="{% url 'descargar_reporte_pdf' %}" style="margin-left: auto; background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%); color: white; padding: 0.7rem 1.5rem; border-radius: 20px; text-decoration: none; font-weight: bold; display: inline-block; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3); transition: all 0.3s ease; font-size: 0.9rem;" onmouseover="this.style.boxShadow='0 6px 16px rgba(168, 85, 247, 0.4)'; this.style.transform='translateY(-2px)';" onmouseout="this.style.boxShadow='0 4px 12px rgba(168, 85, 247, 0.3)'; this.style.transform='translateY(0)';">
+          Descargar Reporte PDF
+        </a>
       </div>
     </div>
 
@@ -1016,8 +1028,8 @@
         <div class="stat-number" style="color: #10b981;">${{ ganancias_totales|floatformat:0|intcomma }}</div>
         <div class="stat-label">Ganancias Totales</div>
       </a>
-      <a href="{% url 'notificaciones' %}" class="stat-card" style="{% if total_notificaciones_no_leidas > 0 %}border-top: 4px solid #ef4444;{% endif %}">
-        <div class="stat-number" style="{% if total_notificaciones_no_leidas > 0 %}color: #ef4444;{% endif %}">{{ total_notificaciones_no_leidas }}</div>
+      <a href="{% url 'notificaciones' %}" class="stat-card {% if total_notificaciones_no_leidas > 0 %}stat-card-alert{% endif %}">
+        <div class="stat-number {% if total_notificaciones_no_leidas > 0 %}stat-number-alert{% endif %}">{{ total_notificaciones_no_leidas }}</div>
         <div class="stat-label">Notificaciones</div>
       </a>
     </div>
@@ -1468,7 +1480,9 @@
   <script>
     /* stylelint-disable */
     /* eslint-disable */
+    /* jshint ignore: start */
     // Datos para los gráficos - Generados por Django
+    // Generación dinámica de datos (ignorar errores de linter)
     const productosData = {
       labels: [
         {% for producto in productos_mas_vendidos %}'{{ producto.nombreProducto|truncatechars:15 }}'{% if not forloop.last %},{% endif %}{% endfor %}
@@ -2267,6 +2281,7 @@
 
     /* stylelint-enable */
     /* eslint-enable */
+    /* jshint ignore: end */
   </script>
 
 </body>

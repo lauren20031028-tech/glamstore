@@ -11,11 +11,11 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             sql="""
             CREATE TABLE IF NOT EXISTS imagenes_productos (
-                id BIGSERIAL PRIMARY KEY,
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
                 id_producto BIGINT NOT NULL,
                 nombre_archivo VARCHAR(255) NOT NULL,
                 ruta VARCHAR(255) NOT NULL,
-                contenido BYTEA NOT NULL,
+                contenido LONGBLOB NOT NULL,
                 fecha_subida TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             """,
@@ -24,11 +24,11 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             sql="""
             CREATE TABLE IF NOT EXISTS imagenes_categorias (
-                id BIGSERIAL PRIMARY KEY,
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
                 id_categoria INTEGER NOT NULL,
                 nombre_archivo VARCHAR(255) NOT NULL,
                 ruta VARCHAR(255) NOT NULL,
-                contenido BYTEA NOT NULL,
+                contenido LONGBLOB NOT NULL,
                 fecha_subida TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             """,

@@ -6,7 +6,7 @@ class LoteProducto(models.Model):
     """
     Modelo para manejar lotes de productos con trazabilidad FIFO
     """
-    idLote = models.AutoField(primary_key=True, db_column='idlote')
+    idLote = models.AutoField(primary_key=True, db_column='idLote')
     producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='lotes', db_column='producto_id')
     codigo_lote = models.CharField(max_length=100, db_column='codigo_lote', help_text="Código único del lote")
     fecha_entrada = models.DateTimeField(auto_now_add=True, db_column='fecha_entrada')
@@ -47,7 +47,7 @@ class MovimientoLote(models.Model):
     """
     Modelo para rastrear movimientos específicos de lotes
     """
-    idMovimientoLote = models.AutoField(primary_key=True, db_column='idmovimientolote')
+    idMovimientoLote = models.AutoField(primary_key=True, db_column='idMovimientoLote')
     lote = models.ForeignKey(LoteProducto, on_delete=models.CASCADE, related_name='movimientos', db_column='lote_id')
     movimiento_producto = models.ForeignKey('MovimientoProducto', on_delete=models.CASCADE, related_name='movimientos_lote', db_column='movimiento_producto_id')
     cantidad = models.IntegerField(db_column='cantidad', help_text="Cantidad tomada de este lote")

@@ -307,6 +307,13 @@
 
   <!-- Contenido principal -->
   <main class="main-content">
+    <div class="login-container" style="display: none;">
+      {% if messages %}
+        {% for message in messages %}
+          <div>{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    </div>
     <div class="login-container">
       <img src="{% static 'img/logoglam.png' %}" alt="Logo Glam Store" class="logo-glam-login">
       <h2>Iniciar Sesión</h2>

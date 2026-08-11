@@ -105,8 +105,8 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': os.getenv('MYSQL_DATABASE', 'glamstoredb'),
         'USER': os.getenv('MYSQL_USER', 'root'),
-        'PASSWORD': os.getenv('MYSQL_PASSWORD', '0000'),  # cambia si es necesario
-        'HOST': os.getenv('MYSQL_HOST', '127.0.0.1'),
+        'PASSWORD': os.getenv('MYSQL_PASSWORD', '0000'),
+        'HOST': os.getenv('MYSQL_HOST', '127.0.0.1'),  # 'db' para Docker, '127.0.0.1' para local
         'PORT': os.getenv('MYSQL_PORT', '3306'),
         'OPTIONS': {
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",

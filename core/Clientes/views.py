@@ -862,22 +862,22 @@ def registro(request):
                 from django.conf import settings
                 
                 # Usar raw SQL porque managed=False no genera IDs automáticamente
-                # NO especificamos idusuario para que PostgreSQL/SQLite use la secuencia
+                # NO especificamos idusuario para que PostgreSQL/MySQL use la secuencia
                 with connection.cursor() as cursor:
-                    # Detectar si es PostgreSQL o SQLite
+                    # Detectar tipo de base de datos
                     db_engine = settings.DATABASES['default']['ENGINE']
                     
-                    if 'postgresql' in db_engine:
-                        # PostgreSQL usa %s
-                        sql = """
-                            INSERT INTO usuarios (email, password, id_rol, idcliente, fechacreacion, nombre, telefono, direccion)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        """
-                    else:
+                    if 'sqlite' in db_engine:
                         # SQLite usa ?
                         sql = """
                             INSERT INTO usuarios (email, password, id_rol, idcliente, fechacreacion, nombre, telefono, direccion)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """
+                    else:
+                        # PostgreSQL y MySQL usan %s
+                        sql = """
+                            INSERT INTO usuarios (email, password, id_rol, idcliente, fechacreacion, nombre, telefono, direccion)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         """
                     
                     cursor.execute(sql, [
@@ -1076,20 +1076,20 @@ def autenticar_usuario(email, password):
     from django.conf import settings
     
     with connection.cursor() as cursor:
-        # Detectar si es PostgreSQL o SQLite
+        # Detectar tipo de base de datos
         db_engine = settings.DATABASES['default']['ENGINE']
         
-        if 'postgresql' in db_engine:
-            # PostgreSQL usa %s
-            sql = """
-                SELECT idUsuario, password, nombre, id_rol FROM usuarios
-                WHERE email = %s
-            """
-        else:
+        if 'sqlite' in db_engine:
             # SQLite usa ?
             sql = """
                 SELECT idUsuario, password, nombre, id_rol FROM usuarios
                 WHERE email = ?
+            """
+        else:
+            # PostgreSQL y MySQL usan %s
+            sql = """
+                SELECT idUsuario, password, nombre, id_rol FROM usuarios
+                WHERE email = %s
             """
         
         cursor.execute(sql, [email])
@@ -1130,54 +1130,94 @@ from django.shortcuts import render
 from django.http import HttpResponse
 
 def contacto(request):
+    """
+    Vista para recibir mensajes de contacto desde el formulario público.
+    Guarda en MensajeContacto y crea una NotificacionReporte para el admin.
+    """
     if request.method == 'POST':
-        nombre = request.POST.get('nombre')
-        email = request.POST.get('email')
-        telefono = request.POST.get('telefono', '')
-        asunto = request.POST.get('asunto')
-        mensaje = request.POST.get('mensaje')
+        try:
+            from core.models import MensajeContacto, NotificacionReporte
+            from django.utils import timezone
+            
+            # Obtener datos del formulario
+            nombre = request.POST.get('nombre', '').strip()
+            email = request.POST.get('email', '').strip()
+            telefono = request.POST.get('telefono', '').strip()
+            asunto = request.POST.get('asunto', '').strip()
+            mensaje_texto = request.POST.get('mensaje', '').strip()
 
-        # Validar campos requeridos
-        if not all([nombre, email, asunto, mensaje]):
-            messages.error(request, "Por favor completa todos los campos requeridos.")
+            # Validar campos requeridos
+            if not all([nombre, email, asunto, mensaje_texto]):
+                messages.error(request, "Por favor completa todos los campos requeridos.")
+                return redirect('contacto')
+            
+            # Validar longitud mínima
+            if len(nombre) < 2:
+                messages.error(request, "El nombre debe tener al menos 2 caracteres.")
+                return redirect('contacto')
+            
+            if len(email) < 5 or '@' not in email:
+                messages.error(request, "Por favor ingresa un email válido.")
+                return redirect('contacto')
+            
+            if len(asunto) < 3:
+                messages.error(request, "El asunto debe tener al menos 3 caracteres.")
+                return redirect('contacto')
+            
+            if len(mensaje_texto) < 10:
+                messages.error(request, "El mensaje debe tener al menos 10 caracteres.")
+                return redirect('contacto')
+
+            # Guardar el mensaje en MensajeContacto
+            mensaje_contacto = MensajeContacto.objects.create(
+                nombre=nombre,
+                email=email,
+                asunto=asunto,
+                mensaje=mensaje_texto,
+                telefono=telefono if telefono else None,
+                leido=False
+            )
+
+            # Crear HTML formateado para la notificación del admin
+            fecha_formato = timezone.now().strftime('%d/%m/%Y %H:%M')
+            telefono_html = f'<p><strong>Teléfono:</strong> {telefono}</p>' if telefono else ''
+            
+            contenido_html = f"""
+            <div style="font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; border-radius: 10px;">
+                <h3 style="color: #6b21a8; margin-bottom: 15px;">📧 Nuevo Mensaje de Contacto</h3>
+                <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #6b21a8;">
+                    <p><strong>De:</strong> {nombre}</p>
+                    <p><strong>Email:</strong> <a href="mailto:{email}" style="color: #3b82f6;">{email}</a></p>
+                    {telefono_html}
+                    <p><strong>Asunto:</strong> {asunto}</p>
+                    <p><strong>Fecha:</strong> {fecha_formato}</p>
+                </div>
+                <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                    <p><strong>Mensaje:</strong></p>
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 6px; white-space: pre-wrap; line-height: 1.6;">
+                        {mensaje_texto}
+                    </div>
+                </div>
+            </div>
+            """
+
+            # Crear notificación para el admin
+            NotificacionReporte.objects.create(
+                titulo=f"Contacto: {nombre} - {asunto}",
+                contenido_html=contenido_html,
+                tipo='CONTACTO',
+                leida=False
+            )
+
+            messages.success(request, "✅ Tu mensaje ha sido enviado correctamente. ¡Gracias por contactarnos! Pronto nos comunicaremos contigo.")
             return redirect('contacto')
-
-        # Guardar el mensaje en la base de datos
-        from core.models import MensajeContacto, NotificacionReporte
-        from django.utils import timezone
         
-        mensaje_contacto = MensajeContacto.objects.create(
-            nombre=nombre,
-            email=email,
-            mensaje=f"Asunto: {asunto}\nTeléfono: {telefono}\n\n{mensaje}"
-        )
-
-        # Crear notificación para el admin
-        contenido_html = f"""
-        <div style="font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; border-radius: 10px;">
-            <h3 style="color: #6b21a8; margin-bottom: 15px;">📧 Nuevo Mensaje de Contacto</h3>
-            <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
-                <p><strong>De:</strong> {nombre}</p>
-                <p><strong>Email:</strong> <a href="mailto:{email}">{email}</a></p>
-                {f'<p><strong>Teléfono:</strong> {telefono}</p>' if telefono else ''}
-                <p><strong>Asunto:</strong> {asunto}</p>
-                <p><strong>Fecha:</strong> {timezone.now().strftime('%d/%m/%Y %H:%M')}</p>
-            </div>
-            <div style="background: white; padding: 15px; border-radius: 8px;">
-                <p><strong>Mensaje:</strong></p>
-                <p style="white-space: pre-wrap;">{mensaje}</p>
-            </div>
-        </div>
-        """
-        
-        NotificacionReporte.objects.create(
-            titulo=f"Mensaje de {nombre}: {asunto}",
-            contenido_html=contenido_html,
-            tipo='CONTACTO'
-        )
-
-        messages.success(request, "Tu mensaje ha sido enviado. ¡Gracias por contactarnos!")
-        return redirect('contacto')
+        except Exception as e:
+            print(f"Error en vista contacto: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            messages.error(request, "Ocurrió un error al enviar tu mensaje. Por favor intenta de nuevo.")
+            return redirect('contacto')
 
     return render(request, 'contacto.html')
 

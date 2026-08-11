@@ -2,28 +2,28 @@ from django.db import models
 
 
 class Producto(models.Model):
-    idProducto = models.BigAutoField(primary_key=True, db_column='idproducto')
-    nombreProducto = models.CharField(max_length=50, db_column='nombreproducto')
+    idProducto = models.BigAutoField(primary_key=True, db_column='idProducto')
+    nombreProducto = models.CharField(max_length=50, db_column='nombreProducto')
     precio = models.DecimalField(max_digits=10, decimal_places=2, db_column='precio')
     stock = models.IntegerField(default=0, db_column='stock')
     descripcion = models.TextField(blank=True, null=True, db_column='descripcion')
     lote = models.CharField(max_length=100, blank=True, null=True, help_text="Código del lote actual", db_column='lote')
-    cantidadDisponible = models.IntegerField(default=0, db_column='cantidaddisponible')
-    fechaIngreso = models.DateTimeField(blank=True, null=True, db_column='fechaingreso')
-    fechaVencimiento = models.DateField(blank=True, null=True, db_column='fechavencimiento')
+    cantidadDisponible = models.IntegerField(default=0, db_column='cantidadDisponible')
+    fechaIngreso = models.DateTimeField(blank=True, null=True, db_column='fechaIngreso')
+    fechaVencimiento = models.DateField(blank=True, null=True, db_column='fechaVencimiento')
 
     idCategoria = models.ForeignKey(
         'Categoria',
         on_delete=models.SET_NULL,
         null=True,
-        db_column='idcategoria'
+        db_column='idCategoria'
     )
 
     idSubcategoria = models.ForeignKey(
         'Subcategoria',
         on_delete=models.SET_NULL,
         null=True,
-        db_column='idsubcategoria'
+        db_column='idSubcategoria'
     )
 
     imagen = models.ImageField(upload_to='productos/', blank=True, null=True, db_column='imagen')
@@ -31,7 +31,7 @@ class Producto(models.Model):
 
     class Meta:
         db_table = 'productos'
-        managed = False # Cambiado a False para coincidir con otros modelos
+        managed = False
         app_label = 'core'
 
     def __str__(self):

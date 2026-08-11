@@ -1,327 +1,576 @@
 {% load static %}
-{% load humanize %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Notificaciones de Problemas | Glam Store</title>
+  <title>Notificaciones | Glam Store</title>
   <link rel="icon" href="{% static 'img/logoglam.png' %}">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { margin: 0; font-family: 'Poppins', 'Segoe UI', sans-serif; background: #f5f7fa; display: flex; min-height: 100vh; }
-    
-    /* SIDEBAR */
-    .sidebar { background: linear-gradient(180deg, #1a1f3a 0%, #0f1419 100%); padding: 2rem; width: 240px; height: 100vh; position: fixed; display: flex; flex-direction: column; border-right: 1px solid #2a3f5f; box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3); z-index: 1000; overflow-y: auto; }
-    .sidebar-header { text-align: center; margin-bottom: 2rem; }
-    .sidebar-logo { width: 80px; height: 80px; border-radius: 50%; box-shadow: 0 6px 20px rgba(168, 85, 247, 0.3); margin-bottom: 1rem; border: 3px solid #a855f7; }
-    .sidebar-header h2 { color: #ffffff; font-size: 1.8rem; margin-bottom: 0.5rem; font-weight: 700; letter-spacing: 1px; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); }
-    .sidebar-header p { color: #a0aec0; font-size: 0.9rem; font-weight: 400; font-style: italic; }
-    .sidebar-user { background-color: rgba(255, 255, 255, 0.08); padding: 1rem; border-radius: 10px; margin-bottom: 1.5rem; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2); text-align: center; border: 1px solid rgba(255, 255, 255, 0.1); }
-    .sidebar-user p { margin: 0.3rem 0; color: #ffffff; font-weight: 600; font-size: 1rem; }
-    .sidebar-user .rol { font-size: 0.85rem; color: #a0aec0; font-weight: normal; }
-    .sidebar-nav { flex: 1; }
-    .sidebar a { display: block; margin: 0.5rem 0; color: #cbd5e0; text-decoration: none; font-weight: 500; padding: 0.75rem 1rem; border-radius: 8px; transition: all 0.3s ease; position: relative; overflow: hidden; border-left: 3px solid transparent; }
-    .sidebar a::before { content: ''; position: absolute; left: 0; top: 0; height: 100%; width: 0; background: rgba(168, 85, 247, 0.1); transition: width 0.3s ease; z-index: -1; }
-    .sidebar a:hover, .sidebar a.active { color: #ffffff; transform: translateX(3px); border-left-color: #a855f7; background: rgba(168, 85, 247, 0.15); }
-    .sidebar a:hover::before, .sidebar a.active::before { width: 100%; }
-    .sidebar-footer { margin-top: auto; padding-top: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.1); }
-    
-    .notification-badge {
-      position: relative;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background: #ef4444;
-      color: white;
-      border-radius: 50%;
-      min-width: 22px;
-      height: 22px;
+    * {
+      margin: 0;
       padding: 0;
-      font-size: 0.75rem;
-      font-weight: bold;
-      margin-left: 6px;
-      vertical-align: middle;
-      flex-shrink: 0;
+      box-sizing: border-box;
     }
-    
-    /* MAIN CONTENT */
-    .main-content { margin-left: 240px; padding: 2rem 2rem; width: calc(100% - 240px); flex: 1; }
-    .page-header { margin-bottom: 1.5rem; }
-    .page-header h1 { font-size: 2rem; color: #1a202c; border-bottom: 3px solid #3b82f6; padding-bottom: 0.5rem; margin-bottom: 0.5rem; font-weight: 700; letter-spacing: 1px; }
-    
-    .stats-bar { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
-    .stat-card { background: white; padding: 1rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); flex: 1; text-align: center; border-top: 4px solid #ef4444; }
-    .stat-number { font-size: 2rem; font-weight: bold; color: #dc2626; }
-    .stat-label { color: #666; font-size: 0.8rem; text-transform: uppercase; }
-    
-    .notificacion-card { background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); margin-bottom: 1rem; overflow: hidden; transition: all 0.3s ease; border-left: 5px solid #ef4444; }
-    .notificacion-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
-    .notificacion-card.leida { border-left: 5px solid #e0e0e0; opacity: 0.8; }
-    
-    .notificacion-header { background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); padding: 1rem; border-bottom: 1px solid #fecaca; }
-    .notificacion-header h3 { color: #dc2626; margin: 0 0 0.3rem 0; font-size: 1.1rem; }
-    .notificacion-meta { color: #666; font-size: 0.85rem; }
-    
-    .notificacion-body { padding: 1rem; }
-    .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.8rem; margin-bottom: 1rem; }
-    .info-item { background: #f8fafc; padding: 0.7rem; border-radius: 6px; border: 1px solid #e2e8f0; }
-    .info-label { font-weight: 600; color: #3b82f6; font-size: 0.75rem; margin-bottom: 0.2rem; text-transform: uppercase; }
-    .info-value { color: #1a202c; font-size: 0.9rem; }
-    
-    .motivo-section { background: #fef3c7; border-left: 3px solid #f59e0b; padding: 0.8rem; border-radius: 6px; margin: 0.8rem 0; }
-    .motivo-section h4 { color: #92400e; margin: 0 0 0.3rem 0; font-size: 0.9rem; }
-    .motivo-section p { color: #92400e; margin: 0; line-height: 1.5; font-size: 0.9rem; }
-    
-    .foto-section { margin: 0.8rem 0; }
-    .foto-section h4 { color: #3b82f6; margin: 0 0 0.3rem 0; font-size: 0.9rem; }
-    .foto-section img { max-width: 150px; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); cursor: pointer; }
-    .foto-section img:hover { transform: scale(1.05); }
-    
-    .notificacion-actions { display: flex; gap: 0.5rem; padding-top: 0.8rem; border-top: 1px solid #e2e8f0; flex-wrap: wrap; }
-    
-    .btn { padding: 0.5rem 1rem; border-radius: 20px; text-decoration: none; font-weight: 600; transition: all 0.3s ease; border: none; cursor: pointer; font-family: 'Poppins', 'Segoe UI', sans-serif; font-size: 0.85rem; display: inline-block; }
-    .btn-primary { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2); }
-    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); }
-    .btn-secondary { background: white; color: #3b82f6; border: 2px solid #3b82f6; }
-    .btn-secondary:hover { background: #eff6ff; }
-    .btn-success { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2); }
-    .btn-success:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
-    
-    .empty-state { text-align: center; padding: 4rem 2rem; color: #999; }
-    .empty-state h2 { font-size: 2rem; margin-bottom: 1rem; }
-    .empty-state p { font-size: 1.1rem; }
-    
-    @media (max-width: 768px) { 
-      .sidebar { width: 100%; height: auto; position: relative; } 
-      .main-content { margin-left: 0; padding: 1.5rem; width: 100%; }
-      .info-grid { grid-template-columns: 1fr 1fr; }
+
+    body {
+      margin: 0;
+      font-family: 'Poppins', 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%);
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ========== SIDEBAR ========== */
+    .sidebar {
+      background: linear-gradient(180deg, #1a1f3a 0%, #0f1419 100%);
+      padding: 2rem;
+      width: 240px;
+      height: 100vh;
+      position: fixed;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #2a3f5f;
+      box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+      z-index: 1000;
+      overflow-y: auto;
+    }
+
+    .sidebar-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .sidebar-logo {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      box-shadow: 0 6px 20px rgba(168, 85, 247, 0.3);
+      margin-bottom: 1rem;
+      border: 3px solid #a855f7;
+    }
+
+    .sidebar-header h2 {
+      color: #ffffff;
+      font-size: 1.8rem;
+      margin-bottom: 0.5rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .sidebar-header p {
+      color: #a0aec0;
+      font-size: 0.9rem;
+      font-weight: 400;
+      font-style: italic;
+    }
+
+    .sidebar-user {
+      background-color: rgba(255, 255, 255, 0.08);
+      padding: 1rem;
+      border-radius: 10px;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      text-align: center;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .sidebar-user p {
+      margin: 0.3rem 0;
+      color: #ffffff;
+      font-weight: 600;
+      font-size: 1rem;
+    }
+
+    .sidebar-user .rol {
+      font-size: 0.85rem;
+      color: #a0aec0;
+      font-weight: normal;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+    }
+
+    .sidebar a {
+      display: block;
+      margin: 0.5rem 0;
+      color: #cbd5e0;
+      text-decoration: none;
+      font-weight: 500;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+      border-left: 3px solid transparent;
+    }
+
+    .sidebar a::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: 0;
+      background: rgba(168, 85, 247, 0.1);
+      transition: width 0.3s ease;
+      z-index: -1;
+    }
+
+    .sidebar a:hover,
+    .sidebar a.active {
+      color: #ffffff;
+      transform: translateX(3px);
+      border-left-color: #a855f7;
+      background: rgba(168, 85, 247, 0.15);
+    }
+
+    .sidebar a:hover::before,
+    .sidebar a.active::before {
+      width: 100%;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* ========== MAIN CONTENT ========== */
+    .main-content {
+      margin-left: 240px;
+      padding: 2rem 5rem;
+      width: calc(100% - 240px - 10rem);
+      flex: 1;
+    }
+
+    .page-header {
+      margin-bottom: 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .page-header h1 {
+      font-size: 2.2rem;
+      color: #1a1a1a;
+      border-bottom: 3px solid #a855f7;
+      padding-bottom: 0.5rem;
+      margin-bottom: 0;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+
+    .btn-volver {
+      background: white;
+      color: #a855f7;
+      padding: 0.75rem 1.5rem;
+      border-radius: 25px;
+      border: 2px solid #a855f7;
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.3s;
+      font-size: 0.95rem;
+    }
+
+    .btn-volver:hover {
+      background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%);
+      transform: translateY(-2px);
+    }
+
+    /* ========== TABS ========== */
+    .tabs-container {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      border-bottom: 2px solid #e0e0e0;
+    }
+
+    .tab-btn {
+      padding: 1rem 1.5rem;
+      border: none;
+      background: none;
+      color: #666;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.3s;
+      border-bottom: 3px solid transparent;
+      font-family: 'Poppins', sans-serif;
+    }
+
+    .tab-btn:hover {
+      color: #a855f7;
+    }
+
+    .tab-btn.active {
+      color: #a855f7;
+      border-bottom-color: #a855f7;
+    }
+
+    /* ========== CARDS ========== */
+    .card {
+      background: #fff;
+      border-radius: 15px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.07);
+      margin-bottom: 1.5rem;
+      overflow: hidden;
+      transition: all 0.3s ease;
+      border-left: 5px solid #a855f7;
+    }
+
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(168, 85, 247, 0.2);
+    }
+
+    .card-header {
+      background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+      padding: 1.5rem;
+      border-bottom: 1px solid #e9d5ff;
+    }
+
+    .card-title {
+      font-size: 1.2rem;
+      color: #7c3aed;
+      font-weight: 700;
+      margin: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .card-meta {
+      color: #999;
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+    }
+
+    .card-body {
+      padding: 1.5rem;
+    }
+
+    /* ========== INFO GRID ========== */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .info-item {
+      background: #f8fafc;
+      padding: 1rem;
+      border-radius: 10px;
+      border-left: 3px solid #a855f7;
+    }
+
+    .info-label {
+      font-weight: 600;
+      color: #a855f7;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .info-value {
+      color: #1a1a1a;
+      font-size: 1rem;
+      margin-top: 0.5rem;
+      font-weight: 500;
+    }
+
+    /* ========== EMPTY STATE ========== */
+    .empty-state {
+      text-align: center;
+      padding: 3rem 2rem;
+      color: #999;
+    }
+
+    .empty-state p {
+      font-size: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .empty-state .subtitle {
+      font-size: 0.85rem;
+      color: #bbb;
+    }
+
+    /* ========== BUTTONS ========== */
+    .btn-primary {
+      background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%);
+      color: white;
+      padding: 0.6rem 1.2rem;
+      border-radius: 20px;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: all 0.3s;
+      display: inline-block;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);
+    }
+
+    /* ========== TAB CONTENT ========== */
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ========== ERROR MESSAGE ========== */
+    .error-message {
+      background: #fee2e2;
+      color: #991b1b;
+      padding: 1rem 1.5rem;
+      border-radius: 10px;
+      margin-bottom: 2rem;
+      border-left: 4px solid #dc2626;
+      display: flex;
+      gap: 1rem;
+    }
+
+    .error-message strong {
+      color: #dc2626;
+    }
+
+    /* ========== RESPONSIVE ========== */
+    @media (max-width: 1024px) {
+      .main-content {
+        padding: 1.5rem 2.5rem;
+        width: calc(100% - 240px - 5rem);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 100%;
+        height: auto;
+        position: relative;
+      }
+
+      .main-content {
+        margin-left: 0;
+        padding: 1.5rem;
+        width: 100%;
+      }
+
+      .page-header {
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .tabs-container {
+        flex-wrap: wrap;
+      }
+
+      .info-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
+  <!-- SIDEBAR -->
   <div class="sidebar">
     <div class="sidebar-header">
       <img src="{% static 'img/logoglam.png' %}" alt="Logo Glam Store" class="sidebar-logo">
       <h2>Admin Glam</h2>
       <p>Panel de Control</p>
     </div>
+
     <div class="sidebar-user">
       <p>{{ request.session.usuario_nombre }}</p>
       <p class="rol">{{ request.session.usuario_rol }}</p>
     </div>
-        <div class="sidebar-nav">
+
+    <div class="sidebar-nav">
       <a href="{% url 'dashboard_admin' %}">Dashboard</a>
       <a href="{% url 'lista_admin' %}">Mi Perfil</a>
-      <a href="{% url 'notificaciones' %}" class="active">Notificaciones{% if total_notificaciones_no_leidas > 0 %}<span class="notification-badge">{{ total_notificaciones_no_leidas }}</span>{% endif %}</a>
+      <a href="{% url 'notificaciones' %}" class="active">Notificaciones</a>
       <a href="{% url 'lista_clientes' %}">Clientes</a>
-     <a href="{% url 'lista_distribuidores' %}">Proveedores</a>
+      <a href="{% url 'lista_distribuidores' %}">Proveedores</a>
       <a href="{% url 'lista_pedidos' %}">Pedidos</a>
       <a href="{% url 'lista_productos' %}">Productos</a>
       <a href="{% url 'lista_repartidores' %}">Repartidores</a>
       <a href="{% url 'lista_categorias' %}">Categorías</a>
       <a href="{% url 'lista_subcategorias' %}">Subcategorías</a>
+      <a href="{% url 'reabastecimiento' %}">Reabastecimiento</a>
     </div>
+
     <div class="sidebar-footer">
       <a href="{% url 'logout' %}">Cerrar Sesión</a>
     </div>
   </div>
 
+  <!-- MAIN CONTENT -->
   <div class="main-content">
+    <!-- PAGE HEADER -->
     <div class="page-header">
       <h1>Notificaciones</h1>
-      <a href="{% url 'dashboard_admin' %}" class="btn btn-secondary" style="margin-top: 1rem; display: inline-block;">Volver al Dashboard</a>
+      <a href="{% url 'dashboard_admin' %}" class="btn-volver">← Volver al Dashboard</a>
     </div>
 
-    <div class="stats-bar">
-      <div class="stat-card">
-        <div class="stat-number">{{ notificaciones.count }}</div>
-        <div class="stat-label">Problemas de Entrega</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number">{{ notificaciones_no_leidas }}</div>
-        <div class="stat-label">Problemas Sin Leer</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number">{{ mensajes_contacto.count }}</div>
-        <div class="stat-label">Mensajes de Contacto</div>
-      </div>
+    <!-- ERROR MESSAGE -->
+    {% if error %}
+    <div class="error-message">
+      <strong>Error:</strong> {{ error }}
+    </div>
+    {% endif %}
+
+    <!-- TABS -->
+    <div class="tabs-container">
+      <button class="tab-btn active" onclick="mostrarTab('problemas')">Problemas de Entrega</button>
+      <button class="tab-btn" onclick="mostrarTab('reportes')">Reportes</button>
+      <button class="tab-btn" onclick="mostrarTab('mensajes')">Mensajes de Contacto</button>
     </div>
 
-    <div style="margin-bottom: 1.5rem; display: flex; gap: 1rem;">
-      <button class="btn btn-primary" onclick="mostrarSeccion('problemas')" id="btn-problemas">Problemas de Entrega</button>
-      <button class="btn btn-secondary" onclick="mostrarSeccion('mensajes')" id="btn-mensajes">Mensajes de Contacto</button>
-    </div>
-
-    <div id="seccion-problemas">
-    {% if notificaciones %}
-      {% for notificacion in notificaciones %}
-      <div class="notificacion-card {% if not notificacion.leida %}no-leida{% else %}leida{% endif %}">
-        <div class="notificacion-header">
-          <h3>Problema con Pedido #{{ notificacion.idPedido.idPedido }}</h3>
-          <div class="notificacion-meta">
-            Reportado el {{ notificacion.fechaReporte|date:"d/m/Y H:i" }}
-            {% if not notificacion.leida %}
-            <strong style="color: #f44336;"> - NUEVO</strong>
-            {% endif %}
+    <!-- TAB: PROBLEMAS -->
+    <div id="problemas" class="tab-content active">
+      {% if notificaciones %}
+        {% for notif in notificaciones %}
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              Pedido #{{ notif.idPedido.idPedido }}
+              <span style="font-size: 0.8rem; color: #dc2626; font-weight: normal;">{{ notif.motivo|truncatewords:3 }}</span>
+            </h3>
+            <div class="card-meta">Reportado: {{ notif.fechaReporte|date:"d/m/Y H:i" }}</div>
           </div>
-        </div>
-        
-        <div class="notificacion-body">
-          <div class="info-grid">
-            <div class="info-item">
-              <div class="info-label">Cliente</div>
-              <div class="info-value">{{ notificacion.idPedido.idCliente.nombre }}</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">Teléfono</div>
-              <div class="info-value">{{ notificacion.idPedido.idCliente.telefono|default:"No registrado" }}</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">Email</div>
-              <div class="info-value">{{ notificacion.idPedido.idCliente.email }}</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">Repartidor</div>
-              <div class="info-value">
-                {% if notificacion.idPedido.idRepartidor %}
-                  {{ notificacion.idPedido.idRepartidor.nombreRepartidor }}
-                {% else %}
-                  Sin asignar
-                {% endif %}
+          <div class="card-body">
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">Cliente</div>
+                <div class="info-value">{{ notif.idPedido.idCliente.nombre|default:"N/A" }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Email</div>
+                <div class="info-value">{{ notif.idPedido.idCliente.email|default:"N/A" }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Teléfono</div>
+                <div class="info-value">{{ notif.idPedido.idCliente.telefono|default:"N/A" }}</div>
               </div>
             </div>
-            <div class="info-item">
-              <div class="info-label">Total Pedido</div>
-              <div class="info-value">${{ notificacion.idPedido.total|floatformat:0|intcomma }}</div>
+            <div style="margin-top: 1rem; padding: 1rem; background: #faf5ff; border-radius: 10px; border-left: 3px solid #dc2626;">
+              <strong style="color: #7c3aed;">Motivo del problema:</strong>
+              <p style="margin-top: 0.5rem; color: #333;">{{ notif.motivo|default:"Sin motivo registrado" }}</p>
             </div>
-            <div class="info-item">
-              <div class="info-label">Dirección</div>
-              <div class="info-value">{{ notificacion.idPedido.idCliente.direccion|default:"No especificada" }}</div>
-            </div>
-          </div>
-          
-          <div class="motivo-section">
-            <h4>Motivo del Problema:</h4>
-            <p>{{ notificacion.motivo }}</p>
-          </div>
-          
-          {% if notificacion.foto %}
-          <div class="foto-section">
-            <h4>Foto Adjunta:</h4>
-            <a href="{{ notificacion.foto.url }}" target="_blank">
-              <img src="{{ notificacion.foto.url }}" alt="Evidencia del problema">
-            </a>
-          </div>
-          {% endif %}
-          
-          {% if notificacion.respuesta_admin %}
-          <div style="background: #d1fae5; border-left: 3px solid #059669; padding: 0.8rem; border-radius: 6px; margin: 0.8rem 0;">
-            <h4 style="color: #065f46; margin: 0 0 0.3rem 0; font-size: 0.9rem;">Respuesta Enviada</h4>
-            <p style="color: #1a202c; margin: 0; line-height: 1.5; font-size: 0.9rem;">{{ notificacion.respuesta_admin }}</p>
-            <div style="color: #666; font-size: 0.8rem; margin-top: 0.3rem;">{{ notificacion.fecha_respuesta|date:"d/m/Y H:i" }}</div>
-          </div>
-          {% endif %}
-          
-          <div class="notificacion-actions">
-            <a href="{% url 'detalle_pedido' notificacion.idPedido.idPedido %}" class="btn btn-primary">Ver Pedido Completo</a>
-            {% if not notificacion.respuesta_admin %}
-            <a href="{% url 'responder_notificacion' notificacion.idNotificacion %}" class="btn btn-primary">Responder al Cliente</a>
-            {% endif %}
-            {% if not notificacion.leida %}
-            <form method="POST" action="{% url 'marcar_notificacion_leida' notificacion.idNotificacion %}" style="display: inline;">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-success">Marcar como Leída</button>
-            </form>
-            {% endif %}
           </div>
         </div>
-      </div>
-      {% endfor %}
-    {% else %}
-      <div class="empty-state">
-        <h2>No hay notificaciones de problemas</h2>
-        <p>Cuando los clientes reporten problemas con sus entregas, aparecerán aquí.</p>
-      </div>
-    {% endif %}
+        {% endfor %}
+      {% else %}
+        <div class="empty-state">
+          <p>No hay problemas reportados</p>
+          <p class="subtitle">Excelente, todos los pedidos van bien</p>
+        </div>
+      {% endif %}
     </div>
 
-    <div id="seccion-mensajes" style="display: none;">
-    {% if mensajes_contacto %}
-      {% for mensaje in mensajes_contacto %}
-      <div class="notificacion-card">
-        <div class="notificacion-header">
-          <h3>Mensaje de {{ mensaje.nombre }}</h3>
-          <div class="notificacion-meta">
-            Recibido el {{ mensaje.fecha|date:"d/m/Y H:i" }}
+    <!-- TAB: REPORTES -->
+    <div id="reportes" class="tab-content">
+      {% if reportes %}
+        {% for rep in reportes %}
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">{{ rep.titulo }}</h3>
+            <div class="card-meta">{{ rep.fechaCreacion|date:"d/m/Y H:i" }}</div>
+          </div>
+          <div class="card-body">
+            <div style="color: #333; line-height: 1.6;">
+              {{ rep.contenido_html|safe }}
+            </div>
           </div>
         </div>
-        
-        <div class="notificacion-body">
-          <div class="info-grid">
-            <div class="info-item">
-              <div class="info-label">Nombre</div>
-              <div class="info-value">{{ mensaje.nombre }}</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">Email</div>
-              <div class="info-value">{{ mensaje.email }}</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">Teléfono</div>
-              <div class="info-value">{{ mensaje.telefono|default:"No proporcionado" }}</div>
-            </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state">
+          <p>No hay reportes</p>
+          <p class="subtitle">No hay reportes generados aún</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- TAB: MENSAJES -->
+    <div id="mensajes" class="tab-content">
+      {% if mensajes_contacto %}
+        {% for msg in mensajes_contacto %}
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              {{ msg.nombre }}
+              <span style="font-size: 0.8rem; color: #7c3aed; font-weight: normal;">{{ msg.asunto|truncatewords:2 }}</span>
+            </h3>
+            <div class="card-meta">{{ msg.fecha|date:"d/m/Y H:i" }}</div>
           </div>
-          
-          <div class="motivo-section">
-            <h4>Mensaje:</h4>
-            <p>{{ mensaje.mensaje }}</p>
-          </div>
-          
-          <div class="notificacion-actions">
-            <a href="mailto:{{ mensaje.email }}" class="btn btn-primary">Responder por Email</a>
-            {% if mensaje.telefono %}
-            <a href="https://wa.me/57{{ mensaje.telefono }}" class="btn btn-success" target="_blank">Responder por WhatsApp</a>
+          <div class="card-body">
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">Email</div>
+                <div class="info-value">{{ msg.email|default:"N/A" }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Teléfono</div>
+                <div class="info-value">{{ msg.telefono|default:"N/A" }}</div>
+              </div>
+            </div>
+            <div style="margin-top: 1rem; padding: 1rem; background: #faf5ff; border-radius: 10px;">
+              <strong style="color: #7c3aed;">Asunto:</strong> {{ msg.asunto }}
+              <p style="margin-top: 0.5rem; color: #333; line-height: 1.6;">{{ msg.mensaje }}</p>
+            </div>
+            {% if msg.email %}
+            <div style="margin-top: 1rem;">
+              <a href="mailto:{{ msg.email }}" class="btn-primary">Responder por Email</a>
+            </div>
             {% endif %}
           </div>
         </div>
-      </div>
-      {% endfor %}
-    {% else %}
-      <div class="empty-state">
-        <h2>No hay mensajes de contacto</h2>
-        <p>Los mensajes enviados desde el formulario de contacto aparecerán aquí.</p>
-      </div>
-    {% endif %}
+        {% endfor %}
+      {% else %}
+        <div class="empty-state">
+          <p>No hay mensajes de contacto</p>
+          <p class="subtitle">No hay mensajes nuevos en este momento</p>
+        </div>
+      {% endif %}
     </div>
   </div>
 
   <script>
-    function mostrarSeccion(seccion) {
-      const seccionProblemas = document.getElementById('seccion-problemas');
-      const seccionMensajes = document.getElementById('seccion-mensajes');
-      const btnProblemas = document.getElementById('btn-problemas');
-      const btnMensajes = document.getElementById('btn-mensajes');
-      
-      // Ocultar todas las secciones
-      seccionProblemas.style.display = 'none';
-      seccionMensajes.style.display = 'none';
-      
-      // Resetear todos los botones a secundario
-      btnProblemas.className = 'btn btn-secondary';
-      btnMensajes.className = 'btn btn-secondary';
-      
-      // Mostrar la sección seleccionada
-      if (seccion === 'problemas') {
-        seccionProblemas.style.display = 'block';
-        btnProblemas.className = 'btn btn-primary';
-      } else if (seccion === 'mensajes') {
-        seccionMensajes.style.display = 'block';
-        btnMensajes.className = 'btn btn-primary';
-      }
+    function mostrarTab(tabName) {
+      // Ocultar todos los tabs
+      const tabs = document.querySelectorAll('.tab-content');
+      tabs.forEach(tab => tab.classList.remove('active'));
+
+      // Mostrar tab seleccionado
+      document.getElementById(tabName).classList.add('active');
+
+      // Actualizar botones activos
+      const botones = document.querySelectorAll('.tab-btn');
+      botones.forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
     }
   </script>
 </body>
 </html>
-
-

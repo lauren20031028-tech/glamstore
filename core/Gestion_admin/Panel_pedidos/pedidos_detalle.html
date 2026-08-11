@@ -605,6 +605,7 @@
         <a href="{% url 'dashboard_admin' %}">Dashboard</a> > 
         <a href="{% url 'lista_pedidos' %}">Pedidos</a> > 
         Detalle #{{ pedido.idPedido }}
+        <span id="actualizado" style="margin-left: 2rem; color: #999; font-size: 0.9rem;"></span>
       </div>
     </div>
     
@@ -791,6 +792,83 @@
       {% endif %}
     </div>
   </div>
+
+  <script>
+    // Función para formatear hora
+    function obtenerHoraActual() {
+      const ahora = new Date();
+      return ahora.toLocaleTimeString('es-ES', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    }
+    
+    // Mostrar que se está actualizando
+    function mostrarActualizado() {
+      const span = document.getElementById('actualizado');
+      span.textContent = `Última actualización: ${obtenerHoraActual()}`;
+      span.style.color = '#4caf50';
+      setTimeout(() => {
+        span.style.color = '#999';
+      }, 3000);
+    }
+    
+    // Actualizar datos del pedido cada 10 segundos
+    function refrescarDatos() {
+      const pedidoId = "{{ pedido.idPedido }}";
+      
+      fetch(`/gestion/dashboard/admin/pedidos/detalle/${pedidoId}/`)
+        .then(response => response.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const newDoc = parser.parseFromString(html, 'text/html');
+          
+          // Actualizar información general
+          const orderInfoDiv = document.querySelector('.order-summary .card-body > div:first-of-type');
+          const newOrderInfoDiv = newDoc.querySelector('.order-summary .card-body > div:first-of-type');
+          if (newOrderInfoDiv && orderInfoDiv) {
+            orderInfoDiv.innerHTML = newOrderInfoDiv.innerHTML;
+          }
+          
+          // Actualizar tabla de productos
+          const tableContainer = document.querySelector('.table-container table tbody');
+          const newTableContainer = newDoc.querySelector('.table-container table tbody');
+          if (newTableContainer && tableContainer) {
+            tableContainer.innerHTML = newTableContainer.innerHTML;
+          }
+          
+          // Actualizar resumen de totales
+          const statsGrid = document.querySelector('.stats-grid');
+          const newStatsGrid = newDoc.querySelector('.stats-grid');
+          if (newStatsGrid && statsGrid) {
+            statsGrid.innerHTML = newStatsGrid.innerHTML;
+          }
+          
+          mostrarActualizado();
+        })
+        .catch(error => {
+          console.log('Error actualizando pedido:', error);
+          document.getElementById('actualizado').textContent = 'Error al actualizar';
+          document.getElementById('actualizado').style.color = '#f44336';
+        });
+    }
+    
+    // Refrescar cada 10 segundos
+    setInterval(refrescarDatos, 10000);
+    
+    // También refrescar cuando la página recupera el foco
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden) {
+        refrescarDatos();
+      }
+    });
+    
+    // Mostrar hora inicial
+    document.addEventListener('DOMContentLoaded', function() {
+      mostrarActualizado();
+    });
+  </script>
 </body>
 </html>
 

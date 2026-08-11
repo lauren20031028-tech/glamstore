@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             sql="""
             CREATE TABLE IF NOT EXISTS correos_pendientes (
-                id BIGSERIAL PRIMARY KEY,
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
                 id_pedido BIGINT NOT NULL,
                 destinatario VARCHAR(255) NOT NULL,
                 asunto VARCHAR(255) NOT NULL,

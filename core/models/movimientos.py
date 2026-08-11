@@ -4,7 +4,7 @@ from .pedidos import Pedido
 from decimal import Decimal
 
 class MovimientoProducto(models.Model):
-    idMovimiento = models.AutoField(primary_key=True, db_column='idmovimiento')
+    idMovimiento = models.AutoField(primary_key=True, db_column='idMovimiento')
     producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='movimientos', db_column='producto_id')
     fecha = models.DateTimeField(auto_now_add=True, db_column='fecha')
     tipo_movimiento = models.CharField(max_length=50, db_column='tipo_movimiento', choices=[
@@ -20,7 +20,7 @@ class MovimientoProducto(models.Model):
     costo_unitario = models.DecimalField(max_digits=10, decimal_places=2, default=0, db_column='costo_unitario', help_text="Costo por unidad para movimientos de entrada.")
     stock_anterior = models.IntegerField(db_column='stock_anterior')
     stock_nuevo = models.IntegerField(db_column='stock_nuevo')
-    id_pedido = models.ForeignKey(Pedido, on_delete=models.SET_NULL, null=True, blank=True, db_column='idpedido')
+    id_pedido = models.ForeignKey(Pedido, on_delete=models.SET_NULL, null=True, blank=True, db_column='idPedido')
     descripcion = models.CharField(max_length=255, blank=True, null=True, db_column='descripcion')
     
     # Campos adicionales para reabastecimiento

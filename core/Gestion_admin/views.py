@@ -9,6 +9,7 @@ from core.models.clientes import Cliente
 from core.models.pedidos import Pedido
 from core.models import Categoria, Subcategoria, Producto, Usuario, MovimientoProducto
 from core.models.pedidos import DetallePedido
+from core.models import NotificacionProblema, NotificacionReporte, MensajeContacto
 from django.contrib.auth import logout
 from django.urls import reverse
 from core.models.repartidores import Repartidor
@@ -38,9 +39,6 @@ def index(request):
 def dashboard_admin_view(request):
     from django.db.models import Q, F, Max
     from django.utils import timezone
-    
-    # Asegurar que la columna email existe
-    Repartidor.ensure_email_column_exists()
     
     # Definir umbrales de tiempo
     ahora = timezone.now()
@@ -77,14 +75,17 @@ def dashboard_admin_view(request):
     # - precio_venta = costo_unitario * 1.19 * (1 + margen_histórico/100)
     # - margen_histórico es el que se guardó en el momento del pedido
     
-    from core.models.configuracion import ConfiguracionGlobal
+    try:
+        from core.models.configuracion import ConfiguracionGlobal
+        margen_global = Decimal(str(ConfiguracionGlobal.get_margen_ganancia()))
+    except:
+        margen_global = Decimal('20')  # valor por defecto
     
-    margen_global = Decimal(str(ConfiguracionGlobal.get_margen_ganancia()))
     ganancias_totales = Decimal('0')
     costo_total = Decimal('0')
     
-    # Iterar sobre todos los detalles de pedidos para calcular ganancias reales
-    detalles = DetallePedido.objects.select_related('idProducto').all()
+    # Iterar sobre TODOS los detalles de pedidos (no limitar a 2 semanas para que sea consistente con ventas_totales)
+    detalles = DetallePedido.objects.select_related('idProducto')
     
     for detalle in detalles:
         if detalle.idProducto:
@@ -299,10 +300,16 @@ def dashboard_admin_view(request):
         }
 
     # === NOTIFICACIONES NO LEÍDAS ===
-    from core.models import NotificacionProblema
+    from core.models import NotificacionProblema, NotificacionReporte
     
-    # Solo contar problemas de entrega (los reportes se envían por correo)
-    total_notificaciones_no_leidas = NotificacionProblema.objects.filter(leida=False).count()
+    # Contar problemas de entrega no leídos
+    problemas_no_leidos = NotificacionProblema.objects.filter(leida=False).count()
+    
+    # Contar reportes no leídos (incluyendo mensajes de contacto)
+    reportes_no_leidos = NotificacionReporte.objects.filter(leida=False).count()
+    
+    # Total de notificaciones no leídas
+    total_notificaciones_no_leidas = problemas_no_leidos + reportes_no_leidos
     
     # === PEDIDOS SIN ASIGNAR REPARTIDOR ===
     # Incluir pedidos confirmados y en preparación sin repartidor
@@ -311,11 +318,6 @@ def dashboard_admin_view(request):
     ).exclude(
         estado_pedido__in=['Entregado', 'Completado', 'Cancelado']
     ).select_related('idCliente').order_by('-fechaCreacion')[:10]
-    
-    # Debug: imprimir información
-    print(f"DEBUG - Pedidos sin repartidor encontrados: {pedidos_por_asignar.count()}")
-    for p in pedidos_por_asignar:
-        print(f"  Pedido #{p.idPedido} - Estado: {p.estado_pedido} - Cliente: {p.idCliente.nombre}")
     
     # === INFORMACIÓN DE VENCIMIENTOS ===
     from core.services.vencimientos_service import VencimientosService
@@ -2006,37 +2008,46 @@ def subcategoria_eliminar_view(request, id):
     return redirect('lista_subcategorias')
 
 def notificaciones_view(request):
-    """Vista para mostrar TODAS las notificaciones de problemas de entrega y mensajes de contacto"""
+    """Vista simple para mostrar notificaciones"""
     try:
-        from core.models import NotificacionProblema, MensajeContacto
+        # Obtener notificaciones de problemas
+        try:
+            notificaciones = NotificacionProblema.objects.select_related(
+                'idPedido__idCliente'
+            ).order_by('-fechaReporte')
+        except Exception as e:
+            print(f"Error al obtener notificaciones: {e}")
+            notificaciones = []
         
-        # Obtener TODAS las notificaciones sin filtros, ordenadas por fecha
-        notificaciones = NotificacionProblema.objects.select_related(
-            'idPedido__idCliente',
-            'idPedido__idRepartidor'
-        ).order_by('-fechaReporte')
+        # Obtener reportes
+        try:
+            reportes = NotificacionReporte.objects.all().order_by('-fechaCreacion')
+        except Exception as e:
+            print(f"Error al obtener reportes: {e}")
+            reportes = []
         
-        # Contar notificaciones no leídas
-        notificaciones_no_leidas = notificaciones.filter(leida=False).count()
-        
-        # Obtener TODOS los mensajes de contacto sin filtros
-        mensajes_contacto = MensajeContacto.objects.all().order_by('-fecha')
-        
-        # Total de notificaciones no leídas
-        total_no_leidas = notificaciones_no_leidas
+        # Obtener mensajes de contacto
+        try:
+            mensajes_contacto = MensajeContacto.objects.all().order_by('-fecha')
+        except Exception as e:
+            print(f"Error al obtener mensajes: {e}")
+            mensajes_contacto = []
         
         return render(request, 'notificaciones.html', {
             'notificaciones': notificaciones,
-            'notificaciones_no_leidas': notificaciones_no_leidas,
+            'reportes': reportes,
             'mensajes_contacto': mensajes_contacto,
-            'total_no_leidas': total_no_leidas
         })
     except Exception as e:
-        print(f"Error en notificaciones_view: {str(e)}")
         import traceback
-        traceback.print_exc()
-        messages.error(request, f"Error al cargar notificaciones: {str(e)}")
-        return redirect('dashboard_admin')
+        print(f"Error en notificaciones_view: {e}")
+        print(traceback.format_exc())
+        return render(request, 'notificaciones.html', {
+            'notificaciones': [],
+            'reportes': [],
+            'mensajes_contacto': [],
+            'error': f"Error al cargar notificaciones: {str(e)}"
+        })
 
 def marcar_notificacion_leida(request, id_notificacion):
     """Marca una notificación como leída"""
@@ -2052,13 +2063,24 @@ def marcar_notificacion_leida(request, id_notificacion):
 
 def marcar_reporte_leido(request, id_reporte):
     """Marca un reporte como leído"""
-    from core.models.notificaciones import NotificacionReporte
     
     if request.method == 'POST':
         reporte = get_object_or_404(NotificacionReporte, idNotificacion=id_reporte)
         reporte.leida = True
         reporte.save()
         messages.success(request, "Reporte marcado como leído.")
+    
+    return redirect('notificaciones')
+
+
+def marcar_mensaje_leido(request, id_mensaje):
+    """Marca un mensaje de contacto como leído"""
+    
+    if request.method == 'POST':
+        mensaje = get_object_or_404(MensajeContacto, idMensaje=id_mensaje)
+        mensaje.leido = True
+        mensaje.save()
+        messages.success(request, "Mensaje marcado como leído.")
     
     return redirect('notificaciones')
 
@@ -3053,3 +3075,881 @@ def actualizar_iva_movimientos_view(request):
     return render(request, 'confirmar_actualizar_iva.html', {
         'total_movimientos': total_movimientos
     })
+
+
+def descargar_reporte_pdf(request):
+    """Descarga un reporte PDF con las estadísticas actuales del dashboard"""
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch, cm
+    from reportlab.lib import colors
+    from datetime import datetime
+    
+    # Obtener datos
+    total_productos = Producto.objects.count()
+    total_clientes = Cliente.objects.count()
+    total_pedidos = Pedido.objects.count()
+    total_completados = Pedido.objects.filter(estado_pedido='Completado').count()
+    total_en_camino = Pedido.objects.filter(estado_pedido='En Camino').count()
+    ventas_totales = Pedido.objects.aggregate(total=Sum('total'))['total'] or 0
+    bajo_stock = Producto.objects.filter(stock__lt=10).count()
+    total_repartidores = Repartidor.objects.count()
+    
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=50, leftMargin=50, topMargin=50, bottomMargin=50)
+    styles = getSampleStyleSheet()
+    elements = []
+    
+    # Estilos personalizados
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=28,
+        textColor=colors.HexColor('#7c3aed'),
+        alignment=1,
+        spaceAfter=10,
+        fontName='Helvetica-Bold'
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'Subtitle',
+        parent=styles['Normal'],
+        fontSize=12,
+        textColor=colors.HexColor('#666666'),
+        alignment=1,
+        spaceAfter=20,
+        fontName='Helvetica'
+    )
+    
+    section_style = ParagraphStyle(
+        'Section',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor('#ffffff'),
+        spaceAfter=12,
+        spaceBefore=12,
+        fontName='Helvetica-Bold',
+        backColor=colors.HexColor('#7c3aed'),
+        borderPadding=10,
+        leftIndent=10
+    )
+    
+    # Titulo
+    elements.append(Paragraph("REPORTE DE ESTADISTICAS", title_style))
+    fecha_reporte = datetime.now().strftime("%d/%m/%Y a las %H:%M:%S")
+    elements.append(Paragraph(f"Generado: {fecha_reporte}", subtitle_style))
+    elements.append(Spacer(1, 0.3*inch))
+    
+    # Seccion 1: Metricas principales
+    elements.append(Paragraph("METRICAS PRINCIPALES", section_style))
+    elements.append(Spacer(1, 0.15*inch))
+    
+    data_metricas = [
+        ['METRICA', 'VALOR', 'ESTADO'],
+        ['Productos Registrados', f"{total_productos}", 'Activo'],
+        ['Clientes Registrados', f"{total_clientes}", 'Activo'],
+        ['Total de Pedidos', f"{total_pedidos}", 'Activo'],
+        ['Pedidos Completados', f"{total_completados}", 'Completado'],
+        ['Pedidos en Camino', f"{total_en_camino}", 'En Transito'],
+        ['Ventas Totales', f"${ventas_totales:,.0f}", 'Confirmadas'],
+        ['Productos con Bajo Stock', f"{bajo_stock}", 'Alerta' if bajo_stock > 0 else 'Normal'],
+        ['Total de Repartidores', f"{total_repartidores}", 'Disponibles'],
+    ]
+    
+    tabla_metricas = Table(data_metricas, colWidths=[3.5*cm, 3.5*cm, 3.5*cm])
+    tabla_metricas.setStyle(TableStyle([
+        # Header
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7c3aed')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 15),
+        
+        # Body
+        ('ALIGN', (0, 1), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 10),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#f5f0ff'), colors.HexColor('#ffffff')]),
+        
+        # Bordes
+        ('GRID', (0, 0), (-1, -1), 1.5, colors.HexColor('#d8b4fe')),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('PADDING', (0, 0), (-1, -1), 12),
+    ]))
+    elements.append(tabla_metricas)
+    elements.append(Spacer(1, 0.4*inch))
+    
+    # Seccion 2: Resumen de desempeño
+    elements.append(Paragraph("RESUMEN DE DESEMPENO", section_style))
+    elements.append(Spacer(1, 0.15*inch))
+    
+    porcentaje_completados = (total_completados / total_pedidos * 100) if total_pedidos > 0 else 0
+    promedio_venta = (ventas_totales / total_pedidos) if total_pedidos > 0 else 0
+    
+    resumen_data = [
+        ['INDICADOR', 'VALOR'],
+        ['Tasa de Completacion', f"{porcentaje_completados:.1f}%"],
+        ['Promedio por Pedido', f"${promedio_venta:,.0f}"],
+        ['Inventario Critico', f"{bajo_stock} productos"],
+        ['Capacidad de Entrega', f"{total_repartidores} repartidores"],
+    ]
+    
+    tabla_resumen = Table(resumen_data, colWidths=[5*cm, 5*cm])
+    tabla_resumen.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#9333ea')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 15),
+        ('ALIGN', (0, 1), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 10),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#f5f0ff'), colors.HexColor('#ffffff')]),
+        ('GRID', (0, 0), (-1, -1), 1.5, colors.HexColor('#d8b4fe')),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('PADDING', (0, 0), (-1, -1), 12),
+    ]))
+    elements.append(tabla_resumen)
+    elements.append(Spacer(1, 0.4*inch))
+    
+    # Notas finales
+    elements.append(Paragraph("NOTAS IMPORTANTES", section_style))
+    elements.append(Spacer(1, 0.15*inch))
+    
+    notas = f"""
+    <font size="10">
+    • Este reporte fue generado automaticamente el {fecha_reporte}<br/>
+    • Los datos mostrados corresponden al estado actual del sistema<br/>
+    • Se recomienda revisar productos con bajo stock para reabastecimiento<br/>
+    • Validar la capacidad de repartidores para entregas pendientes<br/>
+    • Para mas informacion, contacte al equipo de administracion
+    </font>
+    """
+    elements.append(Paragraph(notas, styles['Normal']))
+    
+    # Construir PDF
+    doc.build(elements)
+    buffer.seek(0)
+    
+    response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+    fecha_archivo = datetime.now().strftime("%Y%m%d_%H%M%S")
+    response['Content-Disposition'] = f'attachment; filename="Reporte_GlamStore_{fecha_archivo}.pdf"'
+    
+    return response
+
+
+
+def asignar_pedidos_correcta(request):
+    """Asignar múltiples pedidos a un repartidor y enviar notificaciones"""
+    if request.method == 'POST':
+        repartidor_id = request.POST.get('repartidor_id')
+        pedido_ids = request.POST.getlist('pedido_ids')
+        
+        if repartidor_id and pedido_ids:
+            try:
+                repartidor = Repartidor.objects.get(idRepartidor=repartidor_id)
+                print(f"DEBUG - Asignando {len(pedido_ids)} pedidos a {repartidor.nombreRepartidor}")
+                
+                # 1. ASIGNAR PEDIDOS Y ENVIAR FACTURA A CLIENTES
+                for pedido_id in pedido_ids:
+                    try:
+                        pedido = Pedido.objects.get(idPedido=pedido_id)
+                        pedido.idRepartidor = repartidor
+                        pedido.estado_pedido = 'En Camino'
+                        pedido.save()
+                        print(f"DEBUG - Pedido {pedido_id} asignado a {repartidor.nombreRepartidor}")
+                        
+                        # ENVIAR FACTURA AL CLIENTE CON DATOS DEL REPARTIDOR
+                        try:
+                            enviar_factura_con_repartidor(pedido, repartidor)
+                            print(f"DEBUG - Factura enviada al cliente para pedido {pedido_id}")
+                        except Exception as e:
+                            print(f"DEBUG - Error enviando factura para pedido {pedido_id}: {e}")
+                            
+                    except Pedido.DoesNotExist:
+                        print(f"DEBUG - Pedido {pedido_id} no encontrado")
+                    except Exception as e:
+                        print(f"DEBUG - Error asignando pedido {pedido_id}: {e}")
+                
+                # 2. GENERAR PDF CON TODOS LOS PEDIDOS DEL REPARTIDOR (incluyendo los nuevos)
+                try:
+                    # Obtener todos los pedidos del repartidor
+                    todos_pedidos_repartidor = Pedido.objects.filter(idRepartidor=repartidor)
+                    print(f"DEBUG - Total de pedidos para {repartidor.nombreRepartidor}: {todos_pedidos_repartidor.count()}")
+                    
+                    if repartidor.email and todos_pedidos_repartidor.count() > 0:
+                        enviar_pdf_repartidor_completo(repartidor, todos_pedidos_repartidor)
+                        print(f"DEBUG - PDF enviado al repartidor {repartidor.nombreRepartidor}")
+                except Exception as e:
+                    print(f"DEBUG - Error enviando PDF al repartidor: {e}")
+                    
+            except Repartidor.DoesNotExist:
+                print(f"DEBUG - Repartidor {repartidor_id} no encontrado")
+            except Exception as e:
+                print(f"DEBUG - Error en asignacion: {e}")
+    
+    return redirect('lista_repartidores')
+
+
+def enviar_factura_con_repartidor(pedido, repartidor):
+    """Enviar factura al cliente con datos del repartidor"""
+    from django.core.mail import EmailMessage
+    from django.template.loader import render_to_string
+    from io import BytesIO
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    
+    try:
+        # Generar PDF de factura con datos del repartidor
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        # Estilo personalizado
+        title_style = ParagraphStyle(
+            'Title', parent=styles['Heading1'],
+            fontSize=16, textColor=colors.HexColor('#7c3aed'),
+            alignment=1, spaceAfter=15
+        )
+        
+        # Título
+        elements.append(Paragraph("FACTURA DE COMPRA - GlamStore", title_style))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Información del pedido
+        pedido_info = f"""
+        <b>Pedido #:</b> {pedido.idPedido}<br/>
+        <b>Fecha:</b> {pedido.fechaCreacion.strftime('%d/%m/%Y %H:%M')}<br/>
+        <b>Estado:</b> En Camino<br/>
+        """
+        elements.append(Paragraph(pedido_info, styles['Normal']))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Información del cliente
+        elements.append(Paragraph("<b>DATOS DE ENTREGA</b>", styles['Heading3']))
+        cliente_info = f"""
+        <b>Cliente:</b> {pedido.idCliente.nombre}<br/>
+        <b>Dirección:</b> {pedido.idCliente.direccion}<br/>
+        <b>Teléfono:</b> {pedido.idCliente.telefono if hasattr(pedido.idCliente, 'telefono') else 'N/A'}<br/>
+        """
+        elements.append(Paragraph(cliente_info, styles['Normal']))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # INFORMACIÓN DEL REPARTIDOR (NUEVO)
+        elements.append(Paragraph("<b>DATOS DEL REPARTIDOR</b>", styles['Heading3']))
+        repartidor_info = f"""
+        <b>Repartidor:</b> {repartidor.nombreRepartidor}<br/>
+        <b>Teléfono:</b> {repartidor.telefono if repartidor.telefono else 'N/A'}<br/>
+        <b>Placa Vehículo:</b> {repartidor.placa_vehiculo if hasattr(repartidor, 'placa_vehiculo') else 'N/A'}<br/>
+        <b>Hora Estimada de Entrega:</b> {(pedido.fechaCreacion + timedelta(days=1)).strftime('%d/%m/%Y entre 8:00 AM y 6:00 PM')}<br/>
+        """
+        elements.append(Paragraph(repartidor_info, styles['Normal']))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Tabla de productos
+        elements.append(Paragraph("<b>PRODUCTOS</b>", styles['Heading3']))
+        detalles = DetallePedido.objects.filter(idPedido=pedido)
+        data = [['Producto', 'Cantidad', 'Precio Unitario', 'Total']]
+        
+        total_pedido = 0
+        for detalle in detalles:
+            producto_nombre = detalle.idProducto.nombre[:40]
+            cantidad = detalle.cantidad
+            precio_unitario = detalle.precio_unitario
+            total_producto = cantidad * precio_unitario
+            total_pedido += total_producto
+            
+            data.append([
+                producto_nombre,
+                str(cantidad),
+                f"${precio_unitario:,.0f}",
+                f"${total_producto:,.0f}"
+            ])
+        
+        # Agregar total
+        data.append(['', '', '<b>Total:</b>', f'<b>${total_pedido:,.0f}</b>'])
+        
+        tabla = Table(data, colWidths=[2.5*inch, 1*inch, 1.5*inch, 1.5*inch])
+        tabla.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7c3aed')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.HexColor('#f5f0ff'), colors.white]),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e9d5ff')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ]))
+        elements.append(tabla)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Notas importantes
+        notas = f"""
+        <b>Notas Importantes:</b><br/>
+        • El repartidor {repartidor.nombreRepartidor} ha sido asignado para tu entrega<br/>
+        • Puedes contactarlo al teléfono {repartidor.telefono if repartidor.telefono else 'N/A'} en caso de inconvenientes<br/>
+        • La entrega será realizada en la dirección registrada<br/>
+        • Por favor verifica que los productos lleguen en buen estado<br/>
+        """
+        elements.append(Paragraph(notas, styles['Normal']))
+        
+        # Construir PDF
+        doc.build(elements)
+        buffer.seek(0)
+        
+        # Enviar correo con PDF adjunto
+        cliente_email = pedido.idCliente.email if hasattr(pedido.idCliente, 'email') else None
+        
+        if cliente_email:
+            email = EmailMessage(
+                subject=f"Tu Pedido #{pedido.idPedido} ha sido asignado para entrega - GlamStore",
+                body=f"""
+                Hola {pedido.idCliente.nombre},
+                
+                Tu pedido #{pedido.idPedido} ha sido asignado al repartidor {repartidor.nombreRepartidor}.
+                
+                Los datos de tu repartidor son:
+                - Nombre: {repartidor.nombreRepartidor}
+                - Teléfono: {repartidor.telefono if repartidor.telefono else 'N/A'}
+                
+                Tu entrega será realizada próximamente. Por favor verifica que todo llegue en buen estado.
+                
+                La factura completa con todos los detalles la encuentras en el PDF adjunto.
+                
+                Saludos,
+                Equipo GlamStore
+                """,
+                from_email='glamstore0303777@gmail.com',
+                to=[cliente_email]
+            )
+            email.attach(f'Factura_Pedido_{pedido.idPedido}.pdf', buffer.getvalue(), 'application/pdf')
+            email.send()
+            print(f"DEBUG - Email enviado a {cliente_email}")
+    
+    except Exception as e:
+        print(f"ERROR en enviar_factura_con_repartidor: {e}")
+        raise
+
+
+def enviar_pdf_repartidor_completo(repartidor, pedidos):
+    """Enviar PDF con TODOS los pedidos asignados al repartidor"""
+    from django.core.mail import EmailMessage
+    from io import BytesIO
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    
+    try:
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        # Estilo personalizado
+        title_style = ParagraphStyle(
+            'Title', parent=styles['Heading1'],
+            fontSize=18, textColor=colors.HexColor('#7c3aed'),
+            alignment=1, spaceAfter=20
+        )
+        
+        # Título
+        elements.append(Paragraph(f"RUTA DE ENTREGAS - {repartidor.nombreRepartidor}", title_style))
+        elements.append(Paragraph(f"Fecha de Generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Información del repartidor
+        elements.append(Paragraph("<b>DATOS DEL REPARTIDOR</b>", styles['Heading3']))
+        repartidor_info = f"""
+        <b>Nombre:</b> {repartidor.nombreRepartidor}<br/>
+        <b>Teléfono:</b> {repartidor.telefono if repartidor.telefono else 'N/A'}<br/>
+        <b>Total de Entregas:</b> {pedidos.count()}<br/>
+        """
+        elements.append(Paragraph(repartidor_info, styles['Normal']))
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Tabla de pedidos
+        elements.append(Paragraph("<b>PEDIDOS A ENTREGAR</b>", styles['Heading3']))
+        elements.append(Spacer(1, 0.15*inch))
+        
+        data = [['Pedido #', 'Cliente', 'Dirección', 'Teléfono', 'Total']]
+        
+        total_general = 0
+        for pedido in pedidos.order_by('idPedido'):
+            cliente_nombre = pedido.idCliente.nombre[:30]
+            direccion = pedido.idCliente.direccion[:35] if pedido.idCliente.direccion else 'N/A'
+            telefono = pedido.idCliente.telefono if hasattr(pedido.idCliente, 'telefono') else 'N/A'
+            total = pedido.total
+            total_general += total
+            
+            data.append([
+                f"#{pedido.idPedido}",
+                cliente_nombre,
+                direccion,
+                str(telefono),
+                f"${total:,.0f}"
+            ])
+        
+        # Fila de totales
+        data.append(['', '', '', '<b>TOTAL:</b>', f'<b>${total_general:,.0f}</b>'])
+        
+        tabla = Table(data, colWidths=[1*inch, 1.5*inch, 2*inch, 1.2*inch, 1*inch])
+        tabla.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7c3aed')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.HexColor('#f5f0ff'), colors.white]),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e9d5ff')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+            ('ALIGN', (2, 0), (2, -1), 'LEFT'),
+        ]))
+        elements.append(tabla)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Instrucciones
+        instrucciones = f"""
+        <b>INSTRUCCIONES:</b><br/>
+        • Entregar los productos en buen estado<br/>
+        • Solicitar confirmación de recepción del cliente<br/>
+        • En caso de problemas, contacta a administración<br/>
+        • Teléfono de soporte: +57 3107777777<br/>
+        """
+        elements.append(Paragraph(instrucciones, styles['Normal']))
+        
+        # Construir PDF
+        doc.build(elements)
+        buffer.seek(0)
+        
+        # Enviar correo
+        if repartidor.email:
+            email = EmailMessage(
+                subject=f"Ruta de Entregas - {repartidor.nombreRepartidor} - {pedidos.count()} pedido(s)",
+                body=f"""
+                Hola {repartidor.nombreRepartidor},
+                
+                Te adjuntamos tu ruta de entregas del día con todos los pedidos asignados.
+                
+                Total de entregas: {pedidos.count()}
+                Monto total: ${total_general:,.0f}
+                
+                Por favor revisar cuidadosamente la ruta y confirmar que todos los datos sean correctos.
+                
+                Cualquier duda, contacta a administración.
+                
+                Saludos,
+                Equipo GlamStore
+                """,
+                from_email='glamstore0303777@gmail.com',
+                to=[repartidor.email]
+            )
+            email.attach(f'Ruta_{repartidor.nombreRepartidor}_{datetime.now().strftime("%Y%m%d")}.pdf', buffer.getvalue(), 'application/pdf')
+            email.send()
+            print(f"DEBUG - PDF de ruta enviado a {repartidor.email}")
+    
+    except Exception as e:
+        print(f"ERROR en enviar_pdf_repartidor_completo: {e}")
+        raise
+
+
+
+
+
+# FUNCION PARA ASIGNAR MULTIPLES PEDIDOS A UN REPARTIDOR
+def asignar_pedidos_correcta(request):
+    """Asignar múltiples pedidos a un repartidor y guardar en base de datos"""
+    if request.method == 'POST':
+        repartidor_id = request.POST.get('repartidor_id')
+        pedido_ids = request.POST.getlist('pedido_ids')
+        
+        print(f"DEBUG - POST recibido en asignar_pedidos_correcta")
+        print(f"DEBUG - repartidor_id: {repartidor_id}")
+        print(f"DEBUG - pedido_ids: {pedido_ids}")
+        
+        if repartidor_id and pedido_ids:
+            try:
+                repartidor = Repartidor.objects.get(idRepartidor=repartidor_id)
+                print(f"DEBUG - Repartidor encontrado: {repartidor.nombreRepartidor}")
+                
+                for pedido_id in pedido_ids:
+                    try:
+                        pedido = Pedido.objects.get(idPedido=pedido_id)
+                        pedido.idRepartidor = repartidor
+                        pedido.estado_pedido = 'En Camino'
+                        pedido.save()
+                        print(f"DEBUG - Pedido {pedido_id} asignado a {repartidor.nombreRepartidor}")
+                    except Pedido.DoesNotExist:
+                        print(f"DEBUG - Pedido {pedido_id} no encontrado")
+                    except Exception as e:
+                        print(f"DEBUG - Error asignando pedido {pedido_id}: {e}")
+            except Repartidor.DoesNotExist:
+                print(f"DEBUG - Repartidor {repartidor_id} no encontrado")
+            except Exception as e:
+                print(f"DEBUG - Error en asignacion: {e}")
+    
+    return redirect('lista_repartidores')
+
+
+def enviar_factura_con_repartidor(pedido, repartidor):
+    """Enviar factura al cliente con datos del repartidor"""
+    from django.core.mail import EmailMessage
+    from io import BytesIO
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    
+    try:
+        # Generar PDF de factura con datos del repartidor
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        # Estilo personalizado
+        title_style = ParagraphStyle(
+            'Title', parent=styles['Heading1'],
+            fontSize=16, textColor=colors.HexColor('#7c3aed'),
+            alignment=1, spaceAfter=15
+        )
+        
+        # Título
+        elements.append(Paragraph("FACTURA DE COMPRA - GlamStore", title_style))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Información del pedido
+        pedido_info = f"""
+        <b>Pedido #:</b> {pedido.idPedido}<br/>
+        <b>Fecha:</b> {pedido.fechaCreacion.strftime('%d/%m/%Y %H:%M')}<br/>
+        <b>Estado:</b> En Camino<br/>
+        """
+        elements.append(Paragraph(pedido_info, styles['Normal']))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Información del cliente
+        elements.append(Paragraph("<b>DATOS DE ENTREGA</b>", styles['Heading3']))
+        cliente_info = f"""
+        <b>Cliente:</b> {pedido.idCliente.nombre}<br/>
+        <b>Dirección:</b> {pedido.idCliente.direccion}<br/>
+        <b>Teléfono:</b> {pedido.idCliente.telefono if hasattr(pedido.idCliente, 'telefono') else 'N/A'}<br/>
+        """
+        elements.append(Paragraph(cliente_info, styles['Normal']))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # INFORMACIÓN DEL REPARTIDOR (NUEVO)
+        elements.append(Paragraph("<b>DATOS DEL REPARTIDOR</b>", styles['Heading3']))
+        hora_estimada = (pedido.fechaCreacion + timedelta(days=1)).strftime('%d/%m/%Y entre 8:00 AM y 6:00 PM')
+        repartidor_info = f"""
+        <b>Repartidor:</b> {repartidor.nombreRepartidor}<br/>
+        <b>Teléfono:</b> {repartidor.telefono if repartidor.telefono else 'N/A'}<br/>
+        <b>Hora Estimada de Entrega:</b> {hora_estimada}<br/>
+        """
+        elements.append(Paragraph(repartidor_info, styles['Normal']))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Tabla de productos
+        elements.append(Paragraph("<b>PRODUCTOS</b>", styles['Heading3']))
+        detalles = DetallePedido.objects.filter(idPedido=pedido)
+        data = [['Producto', 'Cantidad', 'Precio Unitario', 'Total']]
+        
+        total_pedido = 0
+        for detalle in detalles:
+            producto_nombre = detalle.idProducto.nombre[:40]
+            cantidad = detalle.cantidad
+            precio_unitario = detalle.precio_unitario
+            total_producto = cantidad * precio_unitario
+            total_pedido += total_producto
+            
+            data.append([
+                producto_nombre,
+                str(cantidad),
+                f"${precio_unitario:,.0f}",
+                f"${total_producto:,.0f}"
+            ])
+        
+        # Agregar total
+        data.append(['', '', '<b>Total:</b>', f'<b>${total_pedido:,.0f}</b>'])
+        
+        tabla = Table(data, colWidths=[2.5*inch, 1*inch, 1.5*inch, 1.5*inch])
+        tabla.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7c3aed')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.HexColor('#f5f0ff'), colors.white]),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e9d5ff')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ]))
+        elements.append(tabla)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Notas importantes
+        notas = f"""
+        <b>Notas Importantes:</b><br/>
+        - El repartidor {repartidor.nombreRepartidor} ha sido asignado para tu entrega<br/>
+        - Puedes contactarlo al teléfono {repartidor.telefono if repartidor.telefono else 'N/A'} en caso de inconvenientes<br/>
+        - La entrega será realizada en la dirección registrada<br/>
+        - Por favor verifica que los productos lleguen en buen estado<br/>
+        """
+        elements.append(Paragraph(notas, styles['Normal']))
+        
+        # Construir PDF
+        doc.build(elements)
+        buffer.seek(0)
+        
+        # Enviar correo con PDF adjunto
+        cliente_email = pedido.idCliente.email if hasattr(pedido.idCliente, 'email') else None
+        
+        if cliente_email:
+            email = EmailMessage(
+                subject=f"Tu Pedido #{pedido.idPedido} ha sido asignado para entrega - GlamStore",
+                body=f"""
+Hola {pedido.idCliente.nombre},
+
+Tu pedido #{pedido.idPedido} ha sido asignado al repartidor {repartidor.nombreRepartidor}.
+
+Los datos de tu repartidor son:
+- Nombre: {repartidor.nombreRepartidor}
+- Teléfono: {repartidor.telefono if repartidor.telefono else 'N/A'}
+- Hora estimada: {hora_estimada}
+
+Tu entrega será realizada próximamente. Por favor verifica que todo llegue en buen estado.
+
+La factura completa con todos los detalles la encuentras en el PDF adjunto.
+
+Saludos,
+Equipo GlamStore
+                """,
+                from_email='glamstore0303777@gmail.com',
+                to=[cliente_email]
+            )
+            email.attach(f'Factura_Pedido_{pedido.idPedido}.pdf', buffer.getvalue(), 'application/pdf')
+            email.send()
+            print(f"DEBUG - Email enviado a {cliente_email}")
+    
+    except Exception as e:
+        print(f"ERROR en enviar_factura_con_repartidor: {e}")
+
+
+def enviar_pdf_repartidor_completo(repartidor, pedidos):
+    """Enviar PDF con TODOS los pedidos asignados al repartidor"""
+    from django.core.mail import EmailMessage
+    from io import BytesIO
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    
+    try:
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        # Estilo personalizado
+        title_style = ParagraphStyle(
+            'Title', parent=styles['Heading1'],
+            fontSize=18, textColor=colors.HexColor('#7c3aed'),
+            alignment=1, spaceAfter=20
+        )
+        
+        # Título
+        elements.append(Paragraph(f"RUTA DE ENTREGAS - {repartidor.nombreRepartidor}", title_style))
+        elements.append(Paragraph(f"Fecha de Generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Información del repartidor
+        elements.append(Paragraph("<b>DATOS DEL REPARTIDOR</b>", styles['Heading3']))
+        repartidor_info = f"""
+        <b>Nombre:</b> {repartidor.nombreRepartidor}<br/>
+        <b>Teléfono:</b> {repartidor.telefono if repartidor.telefono else 'N/A'}<br/>
+        <b>Total de Entregas:</b> {pedidos.count()}<br/>
+        """
+        elements.append(Paragraph(repartidor_info, styles['Normal']))
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Tabla de pedidos
+        elements.append(Paragraph("<b>PEDIDOS A ENTREGAR</b>", styles['Heading3']))
+        elements.append(Spacer(1, 0.15*inch))
+        
+        data = [['Pedido #', 'Cliente', 'Dirección', 'Teléfono', 'Total']]
+        
+        total_general = 0
+        for pedido in pedidos.order_by('idPedido'):
+            cliente_nombre = pedido.idCliente.nombre[:30]
+            direccion = pedido.idCliente.direccion[:35] if pedido.idCliente.direccion else 'N/A'
+            telefono = pedido.idCliente.telefono if hasattr(pedido.idCliente, 'telefono') else 'N/A'
+            total = pedido.total
+            total_general += total
+            
+            data.append([
+                f"#{pedido.idPedido}",
+                cliente_nombre,
+                direccion,
+                str(telefono),
+                f"${total:,.0f}"
+            ])
+        
+        # Fila de totales
+        data.append(['', '', '', '<b>TOTAL:</b>', f'<b>${total_general:,.0f}</b>'])
+        
+        tabla = Table(data, colWidths=[1*inch, 1.5*inch, 2*inch, 1.2*inch, 1*inch])
+        tabla.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7c3aed')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.HexColor('#f5f0ff'), colors.white]),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e9d5ff')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+            ('ALIGN', (2, 0), (2, -1), 'LEFT'),
+        ]))
+        elements.append(tabla)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Instrucciones
+        instrucciones = f"""
+        <b>INSTRUCCIONES:</b><br/>
+        - Entregar los productos en buen estado<br/>
+        - Solicitar confirmación de recepción del cliente<br/>
+        - En caso de problemas, contacta a administración<br/>
+        """
+        elements.append(Paragraph(instrucciones, styles['Normal']))
+        
+        # Construir PDF
+        doc.build(elements)
+        buffer.seek(0)
+        
+        # Enviar correo
+        if repartidor.email:
+            email = EmailMessage(
+                subject=f"Ruta de Entregas - {repartidor.nombreRepartidor} - {pedidos.count()} pedido(s)",
+                body=f"""
+Hola {repartidor.nombreRepartidor},
+
+Te adjuntamos tu ruta de entregas del día con todos los pedidos asignados.
+
+Total de entregas: {pedidos.count()}
+Monto total: ${total_general:,.0f}
+
+Por favor revisar cuidadosamente la ruta y confirmar que todos los datos sean correctos.
+
+Cualquier duda, contacta a administración.
+
+Saludos,
+Equipo GlamStore
+                """,
+                from_email='glamstore0303777@gmail.com',
+                to=[repartidor.email]
+            )
+            email.attach(f'Ruta_{repartidor.nombreRepartidor}_{datetime.now().strftime("%Y%m%d")}.pdf', buffer.getvalue(), 'application/pdf')
+            email.send()
+            print(f"DEBUG - PDF de ruta enviado a {repartidor.email}")
+    
+    except Exception as e:
+        print(f"ERROR en enviar_pdf_repartidor_completo: {e}")
+
+
+
+
+
+def marcar_notificacion_leida(request, id_notificacion):
+    """Marcar una notificación de problema como leída"""
+    from core.models import NotificacionProblema
+    
+    try:
+        notificacion = NotificacionProblema.objects.get(idNotificacion=id_notificacion)
+        notificacion.leida = True
+        notificacion.save()
+        messages.success(request, "Notificación marcada como leída.")
+    except NotificacionProblema.DoesNotExist:
+        messages.error(request, "Notificación no encontrada.")
+    
+    return redirect('notificaciones')
+
+
+def marcar_reporte_leido(request, id_reporte):
+    """Marcar una notificación de reporte como leída"""
+    from core.models import NotificacionReporte
+    
+    try:
+        reporte = NotificacionReporte.objects.get(idNotificacion=id_reporte)
+        reporte.leida = True
+        reporte.save()
+        messages.success(request, "Reporte marcado como leído.")
+    except NotificacionReporte.DoesNotExist:
+        messages.error(request, "Reporte no encontrado.")
+    
+    return redirect('notificaciones')
+
+
+def responder_notificacion_view(request, id_notificacion):
+    """Vista para responder a una notificación de problema"""
+    from core.models import NotificacionProblema
+    from django.utils import timezone
+    
+    try:
+        notificacion = NotificacionProblema.objects.get(idNotificacion=id_notificacion)
+        
+        if request.method == 'POST':
+            respuesta = request.POST.get('respuesta')
+            
+            if respuesta:
+                notificacion.respuesta_admin = respuesta
+                notificacion.fecha_respuesta = timezone.now()
+                notificacion.leida = True
+                notificacion.save()
+                
+                messages.success(request, "Respuesta enviada al cliente.")
+                return redirect('notificaciones')
+            else:
+                messages.error(request, "Debes escribir una respuesta.")
+        
+        context = {'notificacion': notificacion}
+        return render(request, 'Panel_admin/responder_notificacion.html', context)
+        
+    except NotificacionProblema.DoesNotExist:
+        messages.error(request, "Notificación no encontrada.")
+        return redirect('notificaciones')
+
+
+def ver_reporte_view(request, id_reporte):
+    """Vista para ver el detalle de un reporte de contacto"""
+    from core.models import NotificacionReporte
+    
+    try:
+        reporte = NotificacionReporte.objects.get(idNotificacion=id_reporte)
+        
+        # Marcar como leída
+        if not reporte.leida:
+            reporte.leida = True
+            reporte.save()
+        
+        context = {
+            'reporte': reporte,
+            'es_contacto': reporte.tipo == 'CONTACTO'
+        }
+        return render(request, 'Panel_admin/ver_reporte.html', context)
+        
+    except NotificacionReporte.DoesNotExist:
+        messages.error(request, "Reporte no encontrado.")
+        return redirect('notificaciones')

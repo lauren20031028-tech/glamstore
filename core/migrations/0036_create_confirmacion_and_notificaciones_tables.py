@@ -25,7 +25,7 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             sql="""
             CREATE TABLE IF NOT EXISTS clientes (
-                idcliente BIGSERIAL PRIMARY KEY,
+                idcliente BIGINT AUTO_INCREMENT PRIMARY KEY,
                 nombre VARCHAR(100) NOT NULL,
                 email VARCHAR(100) UNIQUE NOT NULL,
                 cedula VARCHAR(20),
@@ -33,7 +33,7 @@ class Migration(migrations.Migration):
                 direccion TEXT
             );
             """,
-            reverse_sql="DROP TABLE IF EXISTS clientes CASCADE;",
+            reverse_sql="DROP TABLE IF EXISTS clientes;",
         ),
         migrations.RunSQL(
             sql="""
@@ -60,7 +60,7 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             sql="""
             CREATE TABLE IF NOT EXISTS productos (
-                idproducto BIGSERIAL PRIMARY KEY,
+                idproducto BIGINT AUTO_INCREMENT PRIMARY KEY,
                 nombreproducto VARCHAR(50) NOT NULL,
                 precio DECIMAL(10, 2) NOT NULL,
                 stock INTEGER DEFAULT 0,
@@ -75,12 +75,12 @@ class Migration(migrations.Migration):
                 precio_venta DECIMAL(10, 2) DEFAULT 0
             );
             """,
-            reverse_sql="DROP TABLE IF EXISTS productos CASCADE;",
+            reverse_sql="DROP TABLE IF EXISTS productos;",
         ),
         migrations.RunSQL(
             sql="""
             CREATE TABLE IF NOT EXISTS pedidos (
-                idpedido BIGSERIAL PRIMARY KEY,
+                idpedido BIGINT AUTO_INCREMENT PRIMARY KEY,
                 fechacreacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 estado VARCHAR(50) DEFAULT 'En Preparacion',
                 estado_pedido VARCHAR(50) DEFAULT 'En Preparacion',
@@ -92,6 +92,6 @@ class Migration(migrations.Migration):
                 facturas_enviadas INTEGER DEFAULT 0
             );
             """,
-            reverse_sql="DROP TABLE IF EXISTS pedidos CASCADE;",
+            reverse_sql="DROP TABLE IF EXISTS pedidos;",
         ),
     ]
